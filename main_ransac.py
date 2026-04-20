@@ -9,7 +9,7 @@ import time
 import numpy as np
 import shapely
 from Samples import sample_mesh_with_raycast, sample_along_edges
-from Util import shapely_poly_to_open3d_mesh, cleanup_result, alaphashape_union
+from Util import shapely_poly_to_open3d_mesh, cleanup_result, alaphashape_union, clean_crop_aabb
 import math
 import pyransac3d as pyrsc
 
@@ -66,10 +66,17 @@ def main():
             for i in range(len(vert)):
                 vert[i, 1] = -(eq_P[0] * vert[i, 0] + eq_P[2] * vert[i, 2] + eq_P[3]) / eq_P[1]
         else:
-            mesh = o3d.geometry.TriangleMesh.create_sphere(radius)
+            # 建立以 center 為球心，半徑 radius 的球
+            mesh = o3d.geometry.TriangleMesh.create_sphere(radius, resolution=10)
             vert = np.asarray(mesh.vertices)
             for i in range(len(vert)):
                 vert[i] = vert[i] + center
+
+            # 切除
+            aabb = pcd.get_axis_aligned_bounding_box()
+            max_bound = aabb.get_max_bound()
+            max_bound[1] = np.inf # 高度不切最高
+            mesh = clean_crop_aabb(mesh, aabb.get_min_bound(), max_bound)
 
         o3d.io.write_triangle_mesh(os.path.join(INPUT_DIR, f"{obj_name}_RANSAC.obj"), mesh)
         print("RANSAC:", time.perf_counter() - s)
