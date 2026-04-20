@@ -10,7 +10,7 @@ import alphashape
 import numpy as np
 import shapely
 from Samples import sample_mesh_with_raycast, sample_along_edges
-from Util import shapely_poly_to_open3d_mesh
+from Util import shapely_poly_to_open3d_mesh, cleanup_result
 import pyransac3d as pyrsc
 
 INPUT_DIR = "main_ransac"
@@ -74,8 +74,5 @@ def main():
 
 
 if __name__ == "__main__":
-    for file in os.listdir(INPUT_DIR):
-        if file.endswith('_alphashape.obj') or file.endswith('_pcd.ply') or file.endswith('_RANSAC.obj'):
-            os.remove(os.path.join(INPUT_DIR, file))
-
+    cleanup_result(INPUT_DIR)
     main()

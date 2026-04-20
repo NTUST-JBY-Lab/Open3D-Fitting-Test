@@ -10,7 +10,7 @@ import alphashape
 import numpy as np
 import shapely
 from Samples import sample_mesh_with_raycast
-from Util import shapely_poly_to_open3d_mesh
+from Util import shapely_poly_to_open3d_mesh, cleanup_result
 
 INPUT_DIR = "main_poisson"
 POISSON_DEPTH = 6
@@ -55,4 +55,5 @@ def main():
 
 
 if __name__ == "__main__":
+    cleanup_result(INPUT_DIR)
     main()
