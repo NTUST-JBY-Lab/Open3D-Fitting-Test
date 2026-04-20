@@ -7,7 +7,7 @@ import numpy as np
 import alphashape
 import shapely
 import pandas as pd
-from Util import shapely_poly_to_open3d_mesh
+from Util import shapely_poly_to_open3d_mesh, alaphashape_union
 import matplotlib.pyplot as plt
 import shapely.plotting
 
@@ -50,18 +50,8 @@ def alphashape2():
     pcd = o3d.io.read_point_cloud("alphashape_debug/0_pcd.ply")
     points_2d = [(x, z) for x, y, z in np.asarray(pcd.points)]
 
-    faces = []
-    # 對點雲做 Delaunay 然後計算每個面的外接圓半徑
-    for simplex, radius in alphashape.alphasimplices(points_2d):
-        if radius < 1 / 50:
-            faces.append(simplex.tolist())
+    polygons = alaphashape_union(points_2d)
 
-    # 將所有留下的面做 Union
-    Union = shapely.unary_union([shapely.Polygon([points_2d[vertex] for vertex in F]) for F in faces])
-
-    polygons = [shapely.Polygon(P.exterior).simplify(0.01) for P in shapely.get_parts(Union) if isinstance(P, shapely.Polygon)]
-
-    print(len(faces))
     o3d.visualization.draw_geometries([shapely_poly_to_open3d_mesh(shapely.MultiPolygon(polygons))], mesh_show_wireframe=True, mesh_show_back_face=True)
     
 def alphashape3():

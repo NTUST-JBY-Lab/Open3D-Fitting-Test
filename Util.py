@@ -2,6 +2,7 @@ import shapely
 import numpy as np
 import open3d as o3d
 import os
+import alphashape
 
 def shapely_poly_to_open3d_mesh(poly: shapely.Polygon, z_value=0.0):
     """
@@ -55,3 +56,21 @@ def cleanup_result(directory: str, file_extension: list[str] = ['_alphashape.obj
         if any(file.endswith(ext) for ext in file_extension):
             # delete
             os.remove(os.path.join(directory, file))
+
+def alaphashape_union(points_2d: list[tuple[float, float]], *, alpha: float = 50) -> list[shapely.Polygon]:
+    """
+    三角化 -> 留外切圓半徑夠小的 -> Union -> 留 exterior -> simplify
+    """
+    if alpha == 0:
+        return [shapely.MultiPoint(points_2d).convex_hull]
+
+    faces = []
+    # 對點雲做 Delaunay 然後計算每個面的外接圓半徑
+    for simplex, radius in alphashape.alphasimplices(points_2d):
+        if radius < 1 / alpha:
+            faces.append(simplex.tolist())
+
+    # 將所有留下的面做 Union
+    Union = shapely.unary_union([shapely.Polygon([points_2d[vertex] for vertex in F]) for F in faces])
+
+    return [shapely.Polygon(P.exterior).simplify(0.01) for P in shapely.get_parts(Union) if isinstance(P, shapely.Polygon)]

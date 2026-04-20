@@ -6,11 +6,11 @@
 import open3d as o3d
 import os
 import time
-import alphashape
 import numpy as np
 import shapely
 from Samples import sample_mesh_with_raycast, sample_along_edges
-from Util import shapely_poly_to_open3d_mesh, cleanup_result
+from Util import shapely_poly_to_open3d_mesh, cleanup_result, alaphashape_union
+import math
 import pyransac3d as pyrsc
 
 INPUT_DIR = "main_ransac"
@@ -29,11 +29,16 @@ def main():
         points, normals = sample_mesh_with_raycast(mesh, 0.01)
         points = np.vstack([points
                             , np.asarray(sample_along_edges(mesh, 0.01).points)])
-
-        if points.size == 0:
-            continue
-
         pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points))
+        points_2d = [(p[0], p[2]) for p in pcd.points]
+
+        # 如果太小 -> 忽略
+        envelope: shapely.Polygon = shapely.minimum_rotated_rectangle(shapely.MultiPoint(points_2d)).normalize()
+        w = math.dist(envelope.exterior.coords[0], envelope.exterior.coords[1])
+        h = math.dist(envelope.exterior.coords[1], envelope.exterior.coords[2])
+        if w < 0.01 or h < 0.01:
+            continue
+        
         # pcd.normals = o3d.utility.Vector3dVector(normals)
         o3d.io.write_point_cloud(os.path.join(INPUT_DIR, f"{obj_name}_pcd.ply"), pcd)
         print("Sample:", time.perf_counter() - s)
@@ -41,10 +46,8 @@ def main():
         # Step2. Alpha Shape #################################
         s = time.perf_counter()
         try:
-            points_2d = [(p[0], p[2]) for p in pcd.points]
-            result = alphashape.alphashape(points_2d, 50)
-            result = result.simplify(0.01)
-            mesh = shapely_poly_to_open3d_mesh(result)
+            result = alaphashape_union(points_2d, alpha=50)
+            mesh = shapely_poly_to_open3d_mesh(max(result, key=lambda p: p.area))
             o3d.io.write_triangle_mesh(os.path.join(INPUT_DIR, f"{obj_name}_alphashape.obj"), mesh)
         except:
             continue
