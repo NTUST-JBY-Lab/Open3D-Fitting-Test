@@ -12,8 +12,17 @@ from Samples import sample_mesh_with_raycast, sample_along_edges
 from Util import shapely_poly_to_open3d_mesh, cleanup_result, alaphashape_union, clean_crop_aabb
 import math
 import pyransac3d as pyrsc
+from typing import Literal
+import argparse
 
-INPUT_DIR = "main_ransac"
+INPUT_DIR = "ransac_test"
+
+parser = argparse.ArgumentParser()
+parser.add_argument("-i", help="Input Directory")
+args = parser.parse_args()
+
+if args.i is not None:
+    INPUT_DIR = args.i
 
 def main():
     for file in os.listdir(INPUT_DIR):
@@ -57,15 +66,19 @@ def main():
         s = time.perf_counter()
         eq_P, inliers_P = pyrsc.Plane().fit(np.asarray(pcd.points))
         center, radius, inliers_S = pyrsc.Sphere().fit(np.asarray(pcd.points))
-        original_size = np.max(mesh.get_axis_aligned_bounding_box().get_extent()[[0, 2]])
 
-        # 如果更貼近平面 or Fitting 出的球太大了 -> 用平面 fitting
-        if inliers_P.size >= inliers_S.size or radius > 2 * original_size:
+        aabb = pcd.get_axis_aligned_bounding_box()
+        original_size = np.max(aabb.get_extent()[[0, 2]])
+
+        # 如果更貼近平面 or Fitting 出的球太大了 -> 用平面 fitting or fitting 的球球心太高
+        if inliers_P.size >= inliers_S.size or radius > 2 * original_size or center[1] >= aabb.get_min_bound()[1]:
             # project alphashape
             vert = np.asarray(mesh.vertices)
             for i in range(len(vert)):
                 vert[i, 1] = -(eq_P[0] * vert[i, 0] + eq_P[2] * vert[i, 2] + eq_P[3]) / eq_P[1]
         else:
+            adjustCenterInPlace(pcd, center)
+
             # 建立以 center 為球心，半徑 radius 的球
             mesh = o3d.geometry.TriangleMesh.create_sphere(radius, resolution=10)
             vert = np.asarray(mesh.vertices)
@@ -73,7 +86,6 @@ def main():
                 vert[i] = vert[i] + center
 
             # 切除
-            aabb = pcd.get_axis_aligned_bounding_box()
             max_bound = aabb.get_max_bound()
             max_bound[1] = np.inf # 高度不切最高
             mesh = clean_crop_aabb(mesh, aabb.get_min_bound(), max_bound)
@@ -82,6 +94,35 @@ def main():
         print("RANSAC:", time.perf_counter() - s)
         print("")
 
+def isSymmetricAlong(pcd: o3d.geometry.PointCloud, axis: Literal['x', 'y', 'z'], thresh: float):
+    """ 檢查 pcd 沿著某一個軸是否是對稱的 """
+    axis = {'x': 0, 'y': 1, 'z': 2}[axis]
+    points = np.asarray(pcd.points).copy()
+    points[:] -= pcd.get_center() # 平移使得中心在 (0, 0, 0)
+
+    # 將點雲切兩半，分成 <= 0 和 > 0
+    points1 = points[points[:, axis] <= 0]
+    points2 = points[points[:, axis] > 0]
+
+    # 對 points1 沿著 axis 軸鏡像
+    points1[:, axis] = -points1[:, axis]
+
+    # 如果距離夠小代表對稱
+    distanceVector = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points1)).compute_point_cloud_distance(
+        o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points2))
+    )
+    mean_dist = np.asarray(distanceVector).mean()
+
+    print(mean_dist)
+
+    return mean_dist <= thresh
+
+def adjustCenterInPlace(pcd: o3d.geometry.PointCloud, center: list[float]):
+    """ 如果 pcd 沿著 X or Z 軸對稱，則將 center 移動到 X or Z 的中點 """
+    if isSymmetricAlong(pcd, 'x', 0.01):
+        center[0] = pcd.get_center()[0]
+    if isSymmetricAlong(pcd, 'z', 0.01):
+        center[2] = pcd.get_center()[2]
 
 if __name__ == "__main__":
     cleanup_result(INPUT_DIR)
