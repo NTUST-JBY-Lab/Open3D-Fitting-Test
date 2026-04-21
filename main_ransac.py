@@ -58,7 +58,8 @@ def main():
             result = alaphashape_union(points_2d, alpha=50)
             mesh = shapely_poly_to_open3d_mesh(max(result, key=lambda p: p.area))
             o3d.io.write_triangle_mesh(os.path.join(INPUT_DIR, f"{obj_name}_alphashape.obj"), mesh)
-        except:
+        except Exception as e:
+            print(e)
             continue
         print("Alpha Shape:", time.perf_counter() - s)
 

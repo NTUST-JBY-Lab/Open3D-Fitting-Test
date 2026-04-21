@@ -67,11 +67,14 @@ def alaphashape_union(points_2d: list[tuple[float, float]], *, alpha: float = 50
     faces = []
     # 對點雲做 Delaunay 然後計算每個面的外接圓半徑
     for simplex, radius in alphashape.alphasimplices(points_2d):
+        # radius 夠小 -> 留下
         if radius < 1 / alpha:
-            faces.append(simplex.tolist())
+            face = shapely.Polygon([points_2d[vid] for vid in simplex])
+            if face.is_valid:
+                faces.append(face)
 
     # 將所有留下的面做 Union
-    Union = shapely.unary_union([shapely.Polygon([points_2d[vertex] for vertex in F]) for F in faces])
+    Union = shapely.unary_union(faces)
 
     return [shapely.Polygon(P.exterior).simplify(0.01) for P in shapely.get_parts(Union) if isinstance(P, shapely.Polygon)]
 
