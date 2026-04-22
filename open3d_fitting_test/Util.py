@@ -2,12 +2,13 @@ import shapely
 import numpy as np
 import open3d as o3d
 import alphashape
+from typing import Literal
 
-def shapely_poly_to_open3d_mesh(poly: shapely.Polygon, y_value=0.0):
+def shapely_poly_to_open3d_mesh(poly: shapely.Polygon | shapely.MultiPolygon, y_value=0.0):
     """
     將 Shapely Polygon 轉換為 Open3D TriangleMesh
     :param poly: shapely.geometry.Polygon 物件
-    :param y_value: 投影到 3D 空間時的 Y 座標 (或是 Z 座標，依你的坐標系而定)
+    :param y_value: 投影到 3D 空間時的 Y 座標
     :return: o3d.geometry.TriangleMesh
     """
     if poly.is_empty:
@@ -46,9 +47,9 @@ def shapely_poly_to_open3d_mesh(poly: shapely.Polygon, y_value=0.0):
     
     return mesh
 
-def alaphashape_union(points_2d: list[tuple[float, float]], *, alpha: float = 50) -> list[shapely.Polygon]:
+def alaphashape_union2D(points_2d: list[tuple[float, float]], *, alpha: float = 50) -> list[shapely.Polygon]:
     """
-    三角化 -> 留外切圓半徑夠小的 -> Union
+    Delaunay 三角化 -> 留外切圓半徑夠小的 -> Union
     """
     if alpha == 0:
         return [shapely.MultiPoint(points_2d).convex_hull]
@@ -66,6 +67,34 @@ def alaphashape_union(points_2d: list[tuple[float, float]], *, alpha: float = 50
     Union = shapely.unary_union(faces)
 
     return [P for P in shapely.get_parts(Union) if isinstance(P, shapely.Polygon)]
+
+def isSymmetricAlong(pcd: o3d.geometry.PointCloud, axis: Literal['x', 'y', 'z'], thresh: float):
+    """ 檢查 pcd 沿著某一個軸是否是對稱的 """
+    axis = {'x': 0, 'y': 1, 'z': 2}[axis]
+    points = np.asarray(pcd.points).copy()
+    points[:] -= pcd.get_center() # 平移使得中心在 (0, 0, 0)
+
+    # 將點雲切兩半，分成 <= 0 和 > 0
+    points1 = points[points[:, axis] <= 0]
+    points2 = points[points[:, axis] > 0]
+
+    # 對 points1 沿著 axis 軸鏡像
+    points1[:, axis] = -points1[:, axis]
+
+    # 如果距離夠小代表對稱
+    distanceVector = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points1)).compute_point_cloud_distance(
+        o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points2))
+    )
+    mean_dist = np.asarray(distanceVector).mean()
+
+    return mean_dist <= thresh
+
+def adjustCenterInPlace(pcd: o3d.geometry.PointCloud, center: list[float]):
+    """ 如果 pcd 沿著 X or Z 軸對稱，則將 center 移動到 X or Z 的中點 """
+    if isSymmetricAlong(pcd, 'x', 0.01):
+        center[0] = pcd.get_center()[0]
+    if isSymmetricAlong(pcd, 'z', 0.01):
+        center[2] = pcd.get_center()[2]
 
 ############################################################################################################################
 # Reference: https://stackoverflow.com/a/75086582/20876404
@@ -174,6 +203,7 @@ def sliceplane(mesh: o3d.geometry.TriangleMesh, axis, value, direction):
     return mesh
 
 def clean_crop_aabb(mesh: o3d.geometry.TriangleMesh, min_corner, max_corner):
+    """ 對 Triangle Mesh 切割，切出 AABB 範圍內的 mesh """
     min_x = min(min_corner[0], max_corner[0])
     min_y = min(min_corner[1], max_corner[1])
     min_z = min(min_corner[2], max_corner[2])

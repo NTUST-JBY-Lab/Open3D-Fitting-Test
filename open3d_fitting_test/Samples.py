@@ -4,7 +4,10 @@
 import open3d as o3d
 import numpy as np
 
-def sample_mesh_with_raycast(mesh: o3d.geometry.TriangleMesh, step=0.01):
+def sample_mesh_with_raycast(mesh: o3d.geometry.TriangleMesh, step=0.01) -> tuple[np.ndarray, np.ndarray]:
+    """
+    :returns (hit_points, hit_normals): 
+    """
     # 1. 建立 Tensor 場景
     t_mesh = o3d.t.geometry.TriangleMesh.from_legacy(mesh)
     scene = o3d.t.geometry.RaycastingScene()

@@ -7,7 +7,7 @@ import numpy as np
 import alphashape
 import shapely
 import pandas as pd
-from open3d_fitting_test.Util import shapely_poly_to_open3d_mesh, alaphashape_union
+from open3d_fitting_test.Util import shapely_poly_to_open3d_mesh, alaphashape_union2D
 import matplotlib.pyplot as plt
 import shapely.plotting
 
@@ -50,7 +50,7 @@ def alphashape2():
     pcd = o3d.io.read_point_cloud("alphashape_debug/0_pcd.ply")
     points_2d = [(x, z) for x, y, z in np.asarray(pcd.points)]
 
-    polygons = alaphashape_union(points_2d)
+    polygons = [P.simplify(0.01) for P in alaphashape_union2D(points_2d)]
 
     o3d.visualization.draw_geometries([shapely_poly_to_open3d_mesh(shapely.MultiPolygon(polygons))], mesh_show_wireframe=True, mesh_show_back_face=True)
     

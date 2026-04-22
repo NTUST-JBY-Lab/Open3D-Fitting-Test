@@ -9,7 +9,7 @@ import time
 import numpy as np
 import shapely
 from open3d_fitting_test.Samples import sample_mesh_with_raycast, sample_along_edges
-from open3d_fitting_test.Util import shapely_poly_to_open3d_mesh, alaphashape_union, clean_crop_aabb
+from open3d_fitting_test.Util import shapely_poly_to_open3d_mesh, alaphashape_union2D, clean_crop_aabb, adjustCenterInPlace
 from Result import cleanup_result
 import math
 import pyransac3d as pyrsc
@@ -56,7 +56,7 @@ def main():
         # Step2. Alpha Shape #################################
         s = time.perf_counter()
         try:
-            result = alaphashape_union(points_2d, alpha=50)
+            result = alaphashape_union2D(points_2d, alpha=50)
             mesh = shapely_poly_to_open3d_mesh(max(result, key=lambda p: p.area).simplify(0.01))
             o3d.io.write_triangle_mesh(os.path.join(INPUT_DIR, f"{obj_name}_alphashape.obj"), mesh)
         except Exception as e:
@@ -95,36 +95,6 @@ def main():
         o3d.io.write_triangle_mesh(os.path.join(INPUT_DIR, f"{obj_name}_RANSAC.obj"), mesh)
         print("RANSAC:", time.perf_counter() - s)
         print("")
-
-def isSymmetricAlong(pcd: o3d.geometry.PointCloud, axis: Literal['x', 'y', 'z'], thresh: float):
-    """ 檢查 pcd 沿著某一個軸是否是對稱的 """
-    axis = {'x': 0, 'y': 1, 'z': 2}[axis]
-    points = np.asarray(pcd.points).copy()
-    points[:] -= pcd.get_center() # 平移使得中心在 (0, 0, 0)
-
-    # 將點雲切兩半，分成 <= 0 和 > 0
-    points1 = points[points[:, axis] <= 0]
-    points2 = points[points[:, axis] > 0]
-
-    # 對 points1 沿著 axis 軸鏡像
-    points1[:, axis] = -points1[:, axis]
-
-    # 如果距離夠小代表對稱
-    distanceVector = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points1)).compute_point_cloud_distance(
-        o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points2))
-    )
-    mean_dist = np.asarray(distanceVector).mean()
-
-    print(mean_dist)
-
-    return mean_dist <= thresh
-
-def adjustCenterInPlace(pcd: o3d.geometry.PointCloud, center: list[float]):
-    """ 如果 pcd 沿著 X or Z 軸對稱，則將 center 移動到 X or Z 的中點 """
-    if isSymmetricAlong(pcd, 'x', 0.01):
-        center[0] = pcd.get_center()[0]
-    if isSymmetricAlong(pcd, 'z', 0.01):
-        center[2] = pcd.get_center()[2]
 
 if __name__ == "__main__":
     cleanup_result(INPUT_DIR)
