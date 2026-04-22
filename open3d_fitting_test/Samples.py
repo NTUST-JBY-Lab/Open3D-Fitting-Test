@@ -80,7 +80,7 @@ def sample_edge(mesh: o3d.geometry.TriangleMesh, v1: int, v2: int, interval: flo
 
     return result
     
-def sample_along_edges(mesh: o3d.geometry.TriangleMesh, interval: float) -> o3d.geometry.PointCloud:
+def sample_along_edges(mesh: o3d.geometry.TriangleMesh, interval: float) -> np.ndarray:
     """
     對 mesh 的每個邊做取樣
     """
@@ -106,4 +106,4 @@ def sample_along_edges(mesh: o3d.geometry.TriangleMesh, interval: float) -> o3d.
                 points += sample_edge(mesh, vStart, vEnd, interval)
                 visited_edge.add((vStart, vEnd))
 
-    return o3d.geometry.PointCloud(o3d.utility.Vector3dVector(set(points)))
+    return np.array(list(set(points)))

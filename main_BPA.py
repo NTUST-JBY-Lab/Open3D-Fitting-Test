@@ -4,7 +4,7 @@
 import open3d as o3d
 import time
 import numpy as np
-from open3d_fitting_test.Samples import sample_mesh_with_raycast, sample_along_edges
+from open3d_fitting_test.Samples import sample_mesh_with_raycast
 from open3d_fitting_test.Util import shapely_poly_to_open3d_mesh
 import alphashape
 from shapely.plotting import *

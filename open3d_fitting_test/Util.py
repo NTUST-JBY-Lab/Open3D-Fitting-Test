@@ -1,7 +1,6 @@
 import shapely
 import numpy as np
 import open3d as o3d
-import os
 import alphashape
 
 def shapely_poly_to_open3d_mesh(poly: shapely.Polygon, y_value=0.0):
@@ -47,19 +46,9 @@ def shapely_poly_to_open3d_mesh(poly: shapely.Polygon, y_value=0.0):
     
     return mesh
 
-def cleanup_result(directory: str, file_extension: list[str] = ['_alphashape.obj', '_pcd.ply', '_RANSAC.obj', '_poisson.obj', '_silhouette.obj']):
-    """
-    對於 directory 下的所有檔案，如果檔名以 file_extension 中的其中一個值結尾，則刪掉
-    """
-    for file in os.listdir(directory):
-        # 如果 file 以任何一個 file_extension 結尾
-        if any(file.endswith(ext) for ext in file_extension):
-            # delete
-            os.remove(os.path.join(directory, file))
-
 def alaphashape_union(points_2d: list[tuple[float, float]], *, alpha: float = 50) -> list[shapely.Polygon]:
     """
-    三角化 -> 留外切圓半徑夠小的 -> Union -> 留 exterior -> simplify
+    三角化 -> 留外切圓半徑夠小的 -> Union
     """
     if alpha == 0:
         return [shapely.MultiPoint(points_2d).convex_hull]
@@ -76,12 +65,12 @@ def alaphashape_union(points_2d: list[tuple[float, float]], *, alpha: float = 50
     # 將所有留下的面做 Union
     Union = shapely.unary_union(faces)
 
-    return [shapely.Polygon(P.exterior).simplify(0.01) for P in shapely.get_parts(Union) if isinstance(P, shapely.Polygon)]
+    return [P for P in shapely.get_parts(Union) if isinstance(P, shapely.Polygon)]
 
 ############################################################################################################################
 # Reference: https://stackoverflow.com/a/75086582/20876404
 ############################################################################################################################
-def sliceplane(mesh, axis, value, direction):
+def sliceplane(mesh: o3d.geometry.TriangleMesh, axis, value, direction):
     # axis can be 0,1,2 (which corresponds to x,y,z)
     # value where the plane is on that axis
     # direction can be True or False (True means remove everything that is
@@ -184,7 +173,7 @@ def sliceplane(mesh, axis, value, direction):
     mesh.triangles = o3d.utility.Vector3iVector(np.array(new_triangles))
     return mesh
 
-def clean_crop_aabb(mesh, min_corner, max_corner):
+def clean_crop_aabb(mesh: o3d.geometry.TriangleMesh, min_corner, max_corner):
     min_x = min(min_corner[0], max_corner[0])
     min_y = min(min_corner[1], max_corner[1])
     min_z = min(min_corner[2], max_corner[2])

@@ -10,7 +10,8 @@ import alphashape
 import numpy as np
 import shapely
 from open3d_fitting_test.Samples import sample_mesh_with_raycast
-from open3d_fitting_test.Util import shapely_poly_to_open3d_mesh, cleanup_result
+from open3d_fitting_test.Util import shapely_poly_to_open3d_mesh
+from Result import cleanup_result
 
 INPUT_DIR = "main_poisson"
 POISSON_DEPTH = 6
