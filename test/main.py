@@ -13,7 +13,7 @@ from open3d_fitting_test.Samples import sample_mesh_with_raycast
 from open3d_fitting_test.Util import shapely_poly_to_open3d_mesh
 from Result import cleanup_result
 
-INPUT_DIR = "main_poisson"
+INPUT_DIR = os.path.join(os.path.dirname(__file__), "poisson_test")
 POISSON_DEPTH = 6
 POISSON_SCALE = 1.5
 

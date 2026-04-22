@@ -13,10 +13,9 @@ from open3d_fitting_test.Util import shapely_poly_to_open3d_mesh, alaphashape_un
 from Result import cleanup_result
 import math
 import pyransac3d as pyrsc
-from typing import Literal
 import argparse
 
-INPUT_DIR = "ransac_test"
+INPUT_DIR = os.path.join(os.path.dirname(__file__), "ransac_test")
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-i", help="Input Directory")

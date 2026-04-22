@@ -6,16 +6,16 @@ from scipy.spatial import Delaunay
 import numpy as np
 import alphashape
 import shapely
-import pandas as pd
+import os
 from open3d_fitting_test.Util import shapely_poly_to_open3d_mesh, alaphashape_union2D
-import matplotlib.pyplot as plt
-import shapely.plotting
+
+PLY_FILE = os.path.join(os.path.dirname(__file__), "alphashape_debug/0_pcd.ply")
 
 def alphashape1():
     """
     三角化 -> 留外切圓半徑夠小的
     """
-    pcd = o3d.io.read_point_cloud("alphashape_debug/0_pcd.ply")
+    pcd = o3d.io.read_point_cloud(PLY_FILE)
 
     # 1. 做三角化
     tris = Delaunay([(x, z) for x, y, z in np.asarray(pcd.points)])
@@ -47,7 +47,7 @@ def alphashape2():
     """
     三角化 -> 留外切圓半徑夠小的 -> Union -> 留 exterior -> simplify
     """
-    pcd = o3d.io.read_point_cloud("alphashape_debug/0_pcd.ply")
+    pcd = o3d.io.read_point_cloud(PLY_FILE)
     points_2d = [(x, z) for x, y, z in np.asarray(pcd.points)]
 
     polygons = [P.simplify(0.01) for P in alaphashape_union2D(points_2d)]
@@ -58,7 +58,7 @@ def alphashape3():
     """
     使用 alphashape.alphashape
     """
-    pcd = o3d.io.read_point_cloud("alphashape_debug/0_pcd.ply")
+    pcd = o3d.io.read_point_cloud(PLY_FILE)
     points_2d = [(x, z) for x, y, z in np.asarray(pcd.points)]
     
     shapes = alphashape.alphashape(points_2d, 50)
