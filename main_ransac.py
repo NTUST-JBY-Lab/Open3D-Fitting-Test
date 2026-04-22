@@ -8,8 +8,8 @@ import os
 import time
 import numpy as np
 import shapely
-from Samples import sample_mesh_with_raycast, sample_along_edges
-from Util import shapely_poly_to_open3d_mesh, cleanup_result, alaphashape_union, clean_crop_aabb
+from open3d_fitting_test.Samples import sample_mesh_with_raycast, sample_along_edges
+from open3d_fitting_test.Util import shapely_poly_to_open3d_mesh, cleanup_result, alaphashape_union, clean_crop_aabb
 import math
 import pyransac3d as pyrsc
 from typing import Literal

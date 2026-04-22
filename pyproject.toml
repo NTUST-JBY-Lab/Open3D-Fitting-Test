@@ -1,0 +1,34 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "open3d-fitting-test"
+version = "0.1.0"
+dependencies = [
+  "pyransac3d",
+  "shapely",
+  "numpy",
+  "open3d",
+  "alphashape"
+]
+authors = [
+  {name = "Bo Yuan, Jiang", email = "jeangbyj@gmail.com"}
+]
+maintainers = [
+  {name = "Bo Yuan, Jiang", email = "jeangbyj@gmail.com"}
+]
+description = "A library to fitting plane for open3d TriangleMesh"
+readme = "README.md"
+keywords = ["open3d"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python"
+]
+
+
+[project.urls]
+Repository = "https://github.com/NTUST-JBY-Lab/Open3D-Fitting-Test"
+
+[tool.hatch.build.targets.wheel]
+packages = ["open3d_fitting_test"]

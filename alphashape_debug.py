@@ -7,7 +7,7 @@ import numpy as np
 import alphashape
 import shapely
 import pandas as pd
-from Util import shapely_poly_to_open3d_mesh, alaphashape_union
+from open3d_fitting_test.Util import shapely_poly_to_open3d_mesh, alaphashape_union
 import matplotlib.pyplot as plt
 import shapely.plotting
 

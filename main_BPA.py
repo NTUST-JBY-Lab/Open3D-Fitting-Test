@@ -4,8 +4,8 @@
 import open3d as o3d
 import time
 import numpy as np
-from Samples import sample_mesh_with_raycast, sample_along_edges
-from Util import shapely_poly_to_open3d_mesh
+from open3d_fitting_test.Samples import sample_mesh_with_raycast, sample_along_edges
+from open3d_fitting_test.Util import shapely_poly_to_open3d_mesh
 import alphashape
 from shapely.plotting import *
 import matplotlib.pyplot as plt

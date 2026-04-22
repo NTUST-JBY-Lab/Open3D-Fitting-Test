@@ -3,7 +3,7 @@
 """
 import open3d as o3d
 import time
-from Samples import sample_mesh_with_raycast
+from open3d_fitting_test.Samples import sample_mesh_with_raycast
 
 INPUT = "input3"
 mesh = o3d.io.read_triangle_mesh(f"{INPUT}.obj")
