@@ -2,3 +2,4 @@
 *.mtl
 *.ply
 __pycache__
+log.txt

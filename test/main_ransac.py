@@ -24,6 +24,8 @@ args = parser.parse_args()
 if args.i is not None:
     INPUT_DIR = args.i
 
+log = open('log.txt', 'w')
+
 def main():
     for file in os.listdir(INPUT_DIR):
     # for file in ["14.obj"]:
@@ -67,17 +69,20 @@ def main():
         s = time.perf_counter()
         eq_P, inliers_P = pyrsc.Plane().fit(np.asarray(pcd.points))
         center, radius, inliers_S = pyrsc.Sphere().fit(np.asarray(pcd.points))
+        log.write(f"{obj_name}\nPlane: {eq_P} ({inliers_P.size})\nSphere: {center}, {radius} ({inliers_S.size})\n")
 
         aabb = pcd.get_axis_aligned_bounding_box()
         original_size = np.max(aabb.get_extent()[[0, 2]])
 
         # 如果更貼近平面 or Fitting 出的球太大了 -> 用平面 fitting or fitting 的球球心太高
-        if inliers_P.size >= inliers_S.size or radius > 2 * original_size or center[1] >= aabb.get_min_bound()[1]:
+        if inliers_P.size >= inliers_S.size:# or radius > 2 * original_size or center[1] >= aabb.get_min_bound()[1]:
+            log.write("Fit Plane\n")
             # project alphashape
             vert = np.asarray(mesh.vertices)
             for i in range(len(vert)):
                 vert[i, 1] = -(eq_P[0] * vert[i, 0] + eq_P[2] * vert[i, 2] + eq_P[3]) / eq_P[1]
         else:
+            log.write("Fit Sphere\n")
             adjustCenterInPlace(pcd, center)
 
             # 建立以 center 為球心，半徑 radius 的球
