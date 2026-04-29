@@ -7,6 +7,7 @@ name = "open3d-fitting-test"
 version = "0.1.0"
 dependencies = [
   "pyransac3d",
+  "scipy",
   "shapely",
   "numpy",
   "open3d",

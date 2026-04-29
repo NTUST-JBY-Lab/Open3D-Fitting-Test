@@ -1,6 +1,7 @@
 import shapely
 from shapely.strtree import STRtree
 import numpy as np
+import numba as nb
 import open3d as o3d
 import alphashape
 from typing import Literal
@@ -54,24 +55,65 @@ def shapely_poly_to_open3d_mesh(poly: shapely.Polygon | shapely.MultiPolygon, y_
     
     return mesh
 
+@nb.guvectorize([(nb.float64[:, :], nb.float64[:])], '(m, n) -> ()')
+def circumradius(points: np.ndarray, res: np.ndarray):
+    """
+    傳入一個 3 * 2 的 2D 點陣列，回傳一個外接圓半徑
+    """
+    rows, _ = points.shape
+    A = np.zeros((rows + 1, rows + 1), dtype=points.dtype)
+    A[:rows, :rows] = 2 * np.dot(points, points.T)
+    A[:rows, -1] = np.ones(rows)
+    A[-1, :rows] = np.ones(rows)
+
+    b = np.hstack((
+        np.sum(points * points, axis=1),
+        np.ones((1))
+    ))
+
+    if np.linalg.det(A) == 0:
+        res[0] = np.nan
+    else:
+        circumcenter = np.linalg.solve(A, b)[:-1]
+        res[0] = np.linalg.norm(points[0, :] - np.dot(circumcenter, points))
+
 def alaphashape_union2D(points_2d: list[tuple[float, float]], *, alpha: float = 50) -> list[shapely.Polygon]:
     """
     Delaunay 三角化 -> 留外切圓半徑夠小的 -> Union
     """
     if alpha == 0:
         return [shapely.MultiPoint(points_2d).convex_hull]
+    
+    from scipy.spatial import Delaunay
+    import time
+    
+    print("== alphashape union 2D ==")
 
-    faces = []
-    # 對點雲做 Delaunay 然後計算每個面的外接圓半徑
-    for simplex, radius in alphashape.alphasimplices(points_2d):
-        # radius 夠小 -> 留下
-        if radius < 1 / alpha:
-            face = shapely.Polygon([points_2d[vid] for vid in simplex])
-            if face.is_valid:
-                faces.append(face)
+    s = time.perf_counter()
+    # 1. 做三角化
+    tris = Delaunay(points_2d)
+    print("Delaunay: ", time.perf_counter() - s, "s")
 
-    # 將所有留下的面做 Union
-    Union = shapely.unary_union(faces)
+    s = time.perf_counter()
+    # 2. 保留外切圓半徑小於 1/alpha 的三角形
+    # tris.simplicies is (N, 3) (dtype=int) -> N 個 simplex，每個 simplex 由 3 個 2D 點儲存，每列為點的 index
+    # tris.points is (M, 2) (dtype=float64) -> M 個 2D 點，每列為點的 xy 座標
+    simplices_coord = tris.points[tris.simplices] # (N, 3, 2)
+
+    radius = circumradius(simplices_coord) # (N, 1)
+
+    faces = tris.simplices[radius < 1 / alpha]
+
+    print("Circumradius: ", time.perf_counter() - s, "s")
+
+    s = time.perf_counter()
+    # 3. 將所有留下的面做 Union
+    Union = shapely.unary_union([
+        shapely.Polygon([points_2d[vid] for vid in F]) for F in faces
+    ])
+    print("Union: ", time.perf_counter() - s, "s")
+
+    print("=========================")
 
     return [P for P in shapely.get_parts(Union) if isinstance(P, shapely.Polygon)]
 

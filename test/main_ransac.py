@@ -34,6 +34,7 @@ def main():
 
         mesh = o3d.io.read_triangle_mesh(os.path.join(INPUT_DIR, file))
         obj_name = file.removesuffix(".obj")
+        print("== Processing: ", obj_name)
 
         # Step1.建立點雲 ####################################
         s = time.perf_counter()
