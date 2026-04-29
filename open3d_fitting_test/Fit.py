@@ -12,7 +12,7 @@ def fitPlaneRANSAC(points: np.ndarray, silhouette: shapely.Polygon | shapely.Mul
     # 轉點雲
     pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points))
     # 邊界加厚
-    AddBoundaryWeight(pcd, silhouette)
+    # AddBoundaryWeight(pcd, silhouette)
     # 估計 Normal
     pcd.estimate_normals()
     # RANSAC

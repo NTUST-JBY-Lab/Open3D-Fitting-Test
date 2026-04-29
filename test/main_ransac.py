@@ -63,7 +63,7 @@ def main():
             print(e)
             continue
 
-        AddBoundaryWeight(pcd, alphashape)
+        # AddBoundaryWeight(pcd, alphashape)
         o3d.io.write_point_cloud(os.path.join(INPUT_DIR, f"{obj_name}_pcd.ply"), pcd)
 
         print("Alpha Shape:", time.perf_counter() - s)
