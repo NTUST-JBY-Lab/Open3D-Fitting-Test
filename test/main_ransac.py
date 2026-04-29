@@ -9,7 +9,7 @@ import time
 import numpy as np
 import shapely
 from open3d_fitting_test.Samples import sample_mesh_with_raycast, sample_along_edges
-from open3d_fitting_test.Util import shapely_poly_to_open3d_mesh, alaphashape_union2D, clean_crop_aabb, adjustCenterInPlace
+from open3d_fitting_test.Util import shapely_poly_to_open3d_mesh, alaphashape_union2D, clean_crop_aabb, adjustCenterInPlace, AddBoundaryWeight
 from Result import cleanup_result
 import math
 import pyransac3d as pyrsc
@@ -51,36 +51,50 @@ def main():
             continue
         
         # pcd.normals = o3d.utility.Vector3dVector(normals)
-        o3d.io.write_point_cloud(os.path.join(INPUT_DIR, f"{obj_name}_pcd.ply"), pcd)
         print("Sample:", time.perf_counter() - s)
 
         # Step2. Alpha Shape #################################
         s = time.perf_counter()
         try:
-            result = alaphashape_union2D(points_2d, alpha=50)
-            mesh = shapely_poly_to_open3d_mesh(max(result, key=lambda p: p.area).simplify(0.01))
+            alphashape = max(alaphashape_union2D(points_2d, alpha=50), key=lambda p: p.area)
+            mesh = shapely_poly_to_open3d_mesh(alphashape.simplify(0.01))
             o3d.io.write_triangle_mesh(os.path.join(INPUT_DIR, f"{obj_name}_alphashape.obj"), mesh)
         except Exception as e:
             print(e)
             continue
+
+        AddBoundaryWeight(pcd, alphashape)
+        o3d.io.write_point_cloud(os.path.join(INPUT_DIR, f"{obj_name}_pcd.ply"), pcd)
+
         print("Alpha Shape:", time.perf_counter() - s)
 
         # Step3. RANSAC ####################################
         s = time.perf_counter()
-        eq_P, inliers_P = pyrsc.Plane().fit(np.asarray(pcd.points))
+        pcd.estimate_normals()
+        eq_P, inliers_P = pcd.segment_plane(0.01, 3, 1000)
         center, radius, inliers_S = pyrsc.Sphere().fit(np.asarray(pcd.points))
-        log.write(f"{obj_name}\nPlane: {eq_P} ({inliers_P.size})\nSphere: {center}, {radius} ({inliers_S.size})\n")
+        log.write(f"{obj_name}\nPlane: {eq_P} ({len(inliers_P)})\nSphere: {center}, {radius} ({inliers_S.size})\n")
 
         aabb = pcd.get_axis_aligned_bounding_box()
         original_size = np.max(aabb.get_extent()[[0, 2]])
 
-        # 如果更貼近平面 or Fitting 出的球太大了 -> 用平面 fitting or fitting 的球球心太高
-        if inliers_P.size >= inliers_S.size:# or radius > 2 * original_size or center[1] >= aabb.get_min_bound()[1]:
+        # 看哪個比較接近就用哪個
+        fit_plane = len(inliers_P) >= inliers_S.size
+
+        # Fitting 出的球太大了 or fitting 的球球心太高 -> 用平面 fitting
+        if radius > 2 * original_size:# or center[1] >= aabb.get_min_bound()[1]:
+            log.write("Sphere too big -> Force Plane\n")
+            fit_plane = True
+        # 兩者很相近 -> 傾向用球
+        elif math.isclose(inliers_S.size, len(inliers_P), rel_tol=0.1):
+            log.write("Spher and Plane are almost same -> Prefer Plane\n")
+            fit_plane = True
+
+        if  fit_plane:
             log.write("Fit Plane\n")
             # project alphashape
             vert = np.asarray(mesh.vertices)
-            for i in range(len(vert)):
-                vert[i, 1] = -(eq_P[0] * vert[i, 0] + eq_P[2] * vert[i, 2] + eq_P[3]) / eq_P[1]
+            vert[:, 1] = -(eq_P[0] * vert[:, 0] + eq_P[2] * vert[:, 2] + eq_P[3]) / eq_P[1]
         else:
             log.write("Fit Sphere\n")
             adjustCenterInPlace(pcd, center)
@@ -88,14 +102,14 @@ def main():
             # 建立以 center 為球心，半徑 radius 的球
             mesh = o3d.geometry.TriangleMesh.create_sphere(radius, resolution=10)
             vert = np.asarray(mesh.vertices)
-            for i in range(len(vert)):
-                vert[i] = vert[i] + center
+            vert[:] = vert[:] + center
 
             # 切除
             max_bound = aabb.get_max_bound()
             max_bound[1] = np.inf # 高度不切最高
             mesh = clean_crop_aabb(mesh, aabb.get_min_bound(), max_bound)
 
+        log.flush()
         o3d.io.write_triangle_mesh(os.path.join(INPUT_DIR, f"{obj_name}_RANSAC.obj"), mesh)
         print("RANSAC:", time.perf_counter() - s)
         print("")

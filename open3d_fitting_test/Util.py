@@ -1,4 +1,5 @@
 import shapely
+from shapely.strtree import STRtree
 import numpy as np
 import open3d as o3d
 import alphashape
@@ -6,7 +7,10 @@ from typing import Literal
 
 def shapely_poly_to_open3d_mesh(poly: shapely.Polygon | shapely.MultiPolygon, y_value=0.0):
     """
-    將 Shapely Polygon 轉換為 Open3D TriangleMesh
+    將 Shapely Polygon 轉換為 Open3D TriangleMesh。
+    - 如果 Polygon 是2維的，將 Polygon 的頂點從 (x, y) -> (x, y_value, y)
+    - 如果 Polygon 是3維的，將 Polygon 的頂點從 (x, y, z) -> (x, z, y)
+
     :param poly: shapely.geometry.Polygon 物件
     :param y_value: 投影到 3D 空間時的 Y 座標
     :return: o3d.geometry.TriangleMesh
@@ -27,7 +31,10 @@ def shapely_poly_to_open3d_mesh(poly: shapely.Polygon | shapely.MultiPolygon, y_
         # tri.exterior.coords 包含 4 個點 (起點與終點重複)，取前 3 個
         for coord in list(tri.exterior.coords)[:3]:
             # 使用 coordinate 作為 key 來避免重複頂點
-            pt = (coord[0], y_value, coord[1]) # 假設你之前是投影到 XZ 平面
+            if len(coord) == 2:
+                pt = (coord[0], y_value, coord[1]) # 假設你之前是投影到 XZ 平面
+            else:
+                pt = (coord[0], coord[2], coord[1])
             
             if pt not in vert_map:
                 vert_map[pt] = len(all_vertices)
@@ -95,6 +102,27 @@ def adjustCenterInPlace(pcd: o3d.geometry.PointCloud, center: list[float]):
         center[0] = pcd.get_center()[0]
     if isSymmetricAlong(pcd, 'z', 0.01):
         center[2] = pcd.get_center()[2]
+
+def AddBoundaryWeight(pcd: o3d.geometry.PointCloud, silhouette: shapely.Polygon, *, dist: float = 0.01):
+    """
+    將靠近 silhouette 邊界上的點加重權重
+    
+    :param dist: 靠近邊界 dist 以內的點會複製一份
+    """
+    lines: list[shapely.LinearRing] = [silhouette.exterior]
+    lines += [inRing for inRing in silhouette.interiors]
+    points_3d = [shapely.Point(p[0], p[2], p[1]) for p in pcd.points]
+
+    tree = STRtree(lines)
+    point_indices = list(set(tree.query(points_3d, 'dwithin', dist)[0].tolist()))
+
+    points_3d = np.asarray(points_3d)
+    points_3d = np.hstack([
+        points_3d,
+        points_3d[point_indices]
+    ])
+
+    pcd.points = o3d.utility.Vector3dVector([(p.coords[0][0], p.coords[0][2], p.coords[0][1]) for p in points_3d])
 
 ############################################################################################################################
 # Reference: https://stackoverflow.com/a/75086582/20876404
