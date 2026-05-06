@@ -10,6 +10,7 @@ import numpy as np
 import shapely
 from open3d_fitting_test.Samples import sample_mesh_with_raycast, sample_along_edges
 from open3d_fitting_test.Util import shapely_poly_to_open3d_mesh, alaphashape_union2D, clean_crop_aabb, adjustCenterInPlace, AddBoundaryWeight
+from open3d_fitting_test.Fit import createCylinder, fitCylinderRANSAC
 from Result import cleanup_result
 import math
 import pyransac3d as pyrsc
@@ -72,43 +73,67 @@ def main():
         # Step3. RANSAC ####################################
         s = time.perf_counter()
         pcd.estimate_normals()
+        # 一次 fit 三個
         eq_P, inliers_P = pcd.segment_plane(0.01, 3, 1000)
-        center, radius, inliers_S = pyrsc.Sphere().fit(np.asarray(pcd.points))
-        log.write(f"{obj_name}\nPlane: {eq_P} ({len(inliers_P)})\nSphere: {center}, {radius} ({inliers_S.size})\n")
+        center_S, radius_S, inliers_S = pyrsc.Sphere().fit(np.asarray(pcd.points))
+        center_C, axis_C, radius_C, inliers_C = fitCylinderRANSAC(np.asarray(points), maxIteration=50)
+        # Log
+        log.write(f"{obj_name}\nPlane: {eq_P} ({len(inliers_P)})\nSphere: {center_S}, {radius_S} ({inliers_S.size})\nCylinder: center-{center_C}, axis-{axis_C}, radius-{radius_C} ({inliers_C.size})\n")
 
         aabb = pcd.get_axis_aligned_bounding_box()
         original_size = np.max(aabb.get_extent()[[0, 2]])
 
-        # 看哪個比較接近就用哪個
-        fit_plane = len(inliers_P) >= inliers_S.size
+        # 看哪個比較接近就用哪個 ##########################################################
+        if len(inliers_P) >= inliers_S.size and len(inliers_P) >= inliers_C.size:
+            fit_target = 'Plane'
+        elif inliers_S.size > len(inliers_P) and inliers_S.size > inliers_C.size:
+            fit_target = 'Sphere'
 
-        # Fitting 出的球太大了 or fitting 的球球心太高 -> 用平面 fitting
-        if radius > 2 * original_size:# or center[1] >= aabb.get_min_bound()[1]:
-            log.write("Sphere too big -> Force Plane\n")
-            fit_plane = True
-        # 兩者很相近 -> 傾向用球
-        elif math.isclose(inliers_S.size, len(inliers_P), rel_tol=0.1):
-            log.write("Spher and Plane are almost same -> Prefer Plane\n")
-            fit_plane = True
-
-        if  fit_plane:
-            log.write("Fit Plane\n")
-            # project alphashape
-            vert = np.asarray(mesh.vertices)
-            vert[:, 1] = -(eq_P[0] * vert[:, 0] + eq_P[2] * vert[:, 2] + eq_P[3]) / eq_P[1]
+            # Fitting 出的球太大了 -> 用平面 fitting
+            if radius_S > 2 * original_size:
+                log.write("Sphere too big -> Force Plane\n")
+                fit_target = 'Plane'
+            # 兩者很相近 -> 傾向用平面
+            elif math.isclose(inliers_S.size, len(inliers_P), rel_tol=0.1):
+                log.write("Spher and Plane are almost same -> Prefer Plane\n")
+                fit_target = 'Plane'
         else:
-            log.write("Fit Sphere\n")
-            adjustCenterInPlace(pcd, center)
+            fit_target = 'Cylinder'
 
-            # 建立以 center 為球心，半徑 radius 的球
-            mesh = o3d.geometry.TriangleMesh.create_sphere(radius, resolution=10)
-            vert = np.asarray(mesh.vertices)
-            vert[:] = vert[:] + center
+            # Fitting 出的圓柱太大了 -> 用平面 fitting
+            if radius_C > 2 * original_size:
+                log.write("Cylinder too big -> Force Plane\n")
+                fit_target = 'Plane'
+            # 兩者很相近 -> 傾向用平面
+            elif math.isclose(inliers_C.size, len(inliers_P), rel_tol=0.1):
+                log.write("Spher and Plane are almost same -> Prefer Plane\n")
+                fit_target = 'Plane'
+        
+        # Create Result ############################################################
+        match fit_target:
+            case 'Plane':
+                log.write("Fit Plane\n")
+                # project alphashape
+                vert = np.asarray(mesh.vertices)
+                vert[:, 1] = -(eq_P[0] * vert[:, 0] + eq_P[2] * vert[:, 2] + eq_P[3]) / eq_P[1]
 
-            # 切除
-            max_bound = aabb.get_max_bound()
-            max_bound[1] = np.inf # 高度不切最高
-            mesh = clean_crop_aabb(mesh, aabb.get_min_bound(), max_bound)
+            case 'Sphere':
+                log.write("Fit Sphere\n")
+                adjustCenterInPlace(pcd, center_S)
+
+                # 建立以 center 為球心，半徑 radius 的球
+                mesh = o3d.geometry.TriangleMesh.create_sphere(radius_S, resolution=10)
+                vert = np.asarray(mesh.vertices)
+                vert[:] = vert[:] + center_S
+
+                # 切除
+                max_bound = aabb.get_max_bound()
+                max_bound[1] = np.inf # 高度不切最高
+                mesh = clean_crop_aabb(mesh, aabb.get_min_bound(), max_bound)
+
+            case 'Cylinder':
+                log.write("Fit Cylinder\n")
+                mesh = createCylinder(np.asarray(pcd.points), center_C, axis_C, radius_C)
 
         log.flush()
         o3d.io.write_triangle_mesh(os.path.join(INPUT_DIR, f"{obj_name}_RANSAC.obj"), mesh)

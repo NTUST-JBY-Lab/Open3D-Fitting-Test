@@ -5,6 +5,7 @@ import numba as nb
 import open3d as o3d
 import alphashape
 from typing import Literal
+from scipy.spatial.transform import Rotation
 
 def shapely_poly_to_open3d_mesh(poly: shapely.Polygon | shapely.MultiPolygon, y_value=0.0):
     """
@@ -55,10 +56,53 @@ def shapely_poly_to_open3d_mesh(poly: shapely.Polygon | shapely.MultiPolygon, y_
     
     return mesh
 
+def rotFromToVec(vec1: np.ndarray, vec2: np.ndarray) -> np.ndarray:
+    """ 建立一個旋轉矩陣，將 vec1 旋轉為 vec2 """
+    vec1 = vec1 / np.linalg.norm(vec1)
+    vec2 = vec2 / np.linalg.norm(vec2)
+
+    # Rotation Axis
+    axis = np.cross(vec1, vec2)
+
+    # Rotation Angle (in radiance)
+    rad = np.arccos(np.dot(vec1, vec2))
+
+    rot = Rotation.from_rotvec(axis * rad)
+
+    return rot.as_matrix()
+
+def rotAlignUpFwd(up: np.ndarray, fwd: np.ndarray) -> np.ndarray:
+    """ 建立一個旋轉，將 fwd 轉到 (0, 0, 1) 的方向，將 fwd X up 轉到 (1, 0, 0)，將 (fwd X up) X fwd 轉到 (0, 1, 0) """
+    up = up / np.linalg.norm(up)
+    fwd = fwd / np.linalg.norm(fwd)
+
+    # 向右
+    R = np.cross(fwd, up)
+
+    # 向上
+    U = np.cross(R, fwd)
+
+    return np.array([
+        R,
+        U,
+        fwd
+    ])
+
+def pointToLineDistance(p0: np.ndarray, line_pt: np.ndarray, line_dir: np.ndarray) -> float:
+    """ 計算 p0 到直線的距離，直線過 line_pt、方向為 line_dir """
+    # Calculate the distance from the point to the line
+    # Line: P1 ~ P2
+    # D = ||(P2-P1) x (P1-P0)|| / ||P2-P1|| = norm (cross (p2-p1, p1-p0)) / norm(p2-p1)
+
+    return np.linalg.norm(np.cross(line_dir, line_pt - p0)) / np.linalg.norm(line_dir)
+
+############################################################################################################################
+# Alpha Shape
+############################################################################################################################
 @nb.guvectorize([(nb.float64[:, :], nb.float64[:])], '(m, n) -> ()')
 def circumradius(points: np.ndarray, res: np.ndarray):
     """
-    傳入一個 3 * 2 的 2D 點陣列，回傳一個外接圓半徑
+    傳入一個 M * N 的 2D 點陣列，代表有 M 個 N 維的點，回傳這些點的外接圓半徑
     """
     rows, _ = points.shape
     A = np.zeros((rows + 1, rows + 1), dtype=points.dtype)
@@ -117,6 +161,9 @@ def alaphashape_union2D(points_2d: list[tuple[float, float]], *, alpha: float = 
 
     return [P for P in shapely.get_parts(Union) if isinstance(P, shapely.Polygon)]
 
+############################################################################################################################
+# Point Cloud
+############################################################################################################################
 def isSymmetricAlong(pcd: o3d.geometry.PointCloud, axis: Literal['x', 'y', 'z'], thresh: float):
     """ 檢查 pcd 沿著某一個軸是否是對稱的 """
     axis = {'x': 0, 'y': 1, 'z': 2}[axis]
