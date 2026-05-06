@@ -15,6 +15,8 @@ from Result import cleanup_result
 import math
 import pyransac3d as pyrsc
 import argparse
+from scipy.spatial import ConvexHull
+from scipy.spatial._qhull import QhullError
 
 INPUT_DIR = os.path.join(os.path.dirname(__file__), "ransac_test")
 
@@ -40,20 +42,36 @@ def main():
         # Step1.建立點雲 ####################################
         s = time.perf_counter()
         points, normals = sample_mesh_with_raycast(mesh, 0.01)
+        print("\tSample Raycast:", time.perf_counter() - s); sR = time.perf_counter()
         points = np.vstack([points
                             , sample_along_edges(mesh, 0.01)])
+        print("\tSample Edges:", time.perf_counter() - sR)
         pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points))
-        points_2d = [(p[0], p[2]) for p in pcd.points]
+        points_2d = np.array([(p[0], p[2]) for p in pcd.points])
 
         # 如果太小 -> 忽略
-        envelope: shapely.Polygon = shapely.minimum_rotated_rectangle(shapely.MultiPoint(points_2d)).normalize()
-        w = math.dist(envelope.exterior.coords[0], envelope.exterior.coords[1])
-        h = math.dist(envelope.exterior.coords[1], envelope.exterior.coords[2])
-        if w < 0.01 or h < 0.01:
-            continue
+        skip = False
+        try:
+            envelope: shapely.Polygon = shapely.minimum_rotated_rectangle(shapely.MultiPoint(
+                points_2d[ConvexHull(points_2d).vertices] # 只拿 convex hull 的邊界點算 rotated bounding box
+            ))
+            
+            if not isinstance(envelope, shapely.Polygon):
+                skip = True
+            else:
+                w = math.dist(envelope.exterior.coords[0], envelope.exterior.coords[1])
+                h = math.dist(envelope.exterior.coords[1], envelope.exterior.coords[2])
+                if w < 0.01 or h < 0.01:
+                    skip = True
+        except QhullError:
+            skip = True
         
-        # pcd.normals = o3d.utility.Vector3dVector(normals)
         print("Sample:", time.perf_counter() - s)
+        o3d.io.write_point_cloud(os.path.join(INPUT_DIR, f"{obj_name}_pcd.ply"), pcd)
+
+        if skip:
+            print("Too small -> Skip\n")
+            continue
 
         # Step2. Alpha Shape #################################
         s = time.perf_counter()
@@ -64,9 +82,6 @@ def main():
         except Exception as e:
             print(e)
             continue
-
-        # AddBoundaryWeight(pcd, alphashape)
-        o3d.io.write_point_cloud(os.path.join(INPUT_DIR, f"{obj_name}_pcd.ply"), pcd)
 
         print("Alpha Shape:", time.perf_counter() - s)
 
@@ -135,6 +150,7 @@ def main():
                 log.write("Fit Cylinder\n")
                 mesh = createCylinder(np.asarray(pcd.points), center_C, axis_C, radius_C)
 
+        log.write("\n")
         log.flush()
         o3d.io.write_triangle_mesh(os.path.join(INPUT_DIR, f"{obj_name}_RANSAC.obj"), mesh)
         print("RANSAC:", time.perf_counter() - s)

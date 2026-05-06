@@ -87,26 +87,21 @@ def sample_along_edges(mesh: o3d.geometry.TriangleMesh, interval: float) -> np.n
     """
     對 mesh 的每個邊做取樣
     """
+    # Get all unique edge pairs
+    F = np.asarray(mesh.triangles) # N * 3
+    E = np.sort(np.vstack([
+        np.column_stack((F[:, 0], F[:, 1])),
+        np.column_stack((F[:, 1], F[:, 2])),
+        np.column_stack((F[:, 2], F[:, 0]))
+    ]), axis=1)
+    E = np.unique(E, axis=0)
+
     points = []
-    visited_edge = set()
-    visited_vert = set()
-
     # Sample Along Edges
-    for face in mesh.triangles:
-        # 如果頂點未拜訪過，加入座標
-        for i in range(3):
-            v = face[i]
+    for v1, v2 in E:
+        points += sample_edge(mesh, v1, v2, interval)
 
-            if not v in visited_vert:
-                points.append(tuple(mesh.vertices[v]))
-                visited_vert.add(v)
-
-        # 對三個邊取樣
-        for i in range(3):
-            vStart, vEnd = ordered_tuple(face[i], face[(i + 1) % 3])
-
-            if not (vStart, vEnd) in visited_edge:
-                points += sample_edge(mesh, vStart, vEnd, interval)
-                visited_edge.add((vStart, vEnd))
-
-    return np.array(list(set(points)))
+    if len(points) > 0:
+        return np.vstack([np.array(points), mesh.vertices])
+    else:
+        return np.asarray(mesh.vertices)

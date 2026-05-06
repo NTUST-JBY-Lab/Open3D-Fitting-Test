@@ -9,6 +9,7 @@ dependencies = [
   "pyransac3d",
   "scipy",
   "shapely",
+  "numba",
   "numpy",
   "open3d",
   "alphashape"

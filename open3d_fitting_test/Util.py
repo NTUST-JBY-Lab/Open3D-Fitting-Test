@@ -137,7 +137,7 @@ def alaphashape_union2D(points_2d: list[tuple[float, float]], *, alpha: float = 
     s = time.perf_counter()
     # 1. 做三角化
     tris = Delaunay(points_2d)
-    print("Delaunay: ", time.perf_counter() - s, "s")
+    print("\tDelaunay: ", time.perf_counter() - s, "s")
 
     s = time.perf_counter()
     # 2. 保留外切圓半徑小於 1/alpha 的三角形
@@ -149,16 +149,14 @@ def alaphashape_union2D(points_2d: list[tuple[float, float]], *, alpha: float = 
 
     faces = tris.simplices[radius < 1 / alpha]
 
-    print("Circumradius: ", time.perf_counter() - s, "s")
+    print("\tCircumradius: ", time.perf_counter() - s, "s")
 
     s = time.perf_counter()
     # 3. 將所有留下的面做 Union
     Union = shapely.unary_union([
         shapely.Polygon([points_2d[vid] for vid in F]) for F in faces
     ])
-    print("Union: ", time.perf_counter() - s, "s")
-
-    print("=========================")
+    print("\tUnion: ", time.perf_counter() - s, "s")
 
     return [P for P in shapely.get_parts(Union) if isinstance(P, shapely.Polygon)]
 
