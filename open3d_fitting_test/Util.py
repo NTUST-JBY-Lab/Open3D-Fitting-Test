@@ -99,10 +99,11 @@ def pointToLineDistance(p0: np.ndarray, line_pt: np.ndarray, line_dir: np.ndarra
 ############################################################################################################################
 # Alpha Shape
 ############################################################################################################################
-@nb.guvectorize([(nb.float64[:, :], nb.float64[:])], '(m, n) -> ()')
+@nb.guvectorize([(nb.float64[:, :], nb.float64[:])], '(m, n) -> ()', cache=True)
 def circumradius(points: np.ndarray, res: np.ndarray):
     """
-    傳入一個 M * N 的 2D 點陣列，代表有 M 個 N 維的點，回傳這些點的外接圓半徑
+    傳入一個 M * N 的點陣列，代表有 M 個 N 維的點，回傳這些點的外接圓半徑
+    - Reference: alphashape.circumradius
     """
     rows, _ = points.shape
     A = np.zeros((rows + 1, rows + 1), dtype=points.dtype)
@@ -329,12 +330,12 @@ def clean_crop_aabb(mesh: o3d.geometry.TriangleMesh, min_corner, max_corner):
     max_z = max(min_corner[2], max_corner[2])
 
     # mesh = sliceplane(mesh, 0, min_x, False)
-    mesh_sliced = sliceplane(mesh, 0, max_x, True)
-    mesh_sliced = sliceplane(mesh_sliced, 0, min_x, False)
-    mesh_sliced = sliceplane(mesh_sliced, 1, max_y, True)
-    mesh_sliced = sliceplane(mesh_sliced, 1, min_y, False)
-    mesh_sliced = sliceplane(mesh_sliced, 2, max_z, True)
-    mesh_sliced = sliceplane(mesh_sliced, 2, min_z, False)
+    if np.isfinite(max_x): mesh_sliced = sliceplane(mesh, 0, max_x, True)
+    if np.isfinite(min_x): mesh_sliced = sliceplane(mesh_sliced, 0, min_x, False)
+    if np.isfinite(max_y): mesh_sliced = sliceplane(mesh_sliced, 1, max_y, True)
+    if np.isfinite(min_y): mesh_sliced = sliceplane(mesh_sliced, 1, min_y, False)
+    if np.isfinite(max_z): mesh_sliced = sliceplane(mesh_sliced, 2, max_z, True)
+    if np.isfinite(min_z): mesh_sliced = sliceplane(mesh_sliced, 2, min_z, False)
     # mesh_sliced = mesh_sliced.paint_uniform_color([0,0,1])
 
     return mesh_sliced
