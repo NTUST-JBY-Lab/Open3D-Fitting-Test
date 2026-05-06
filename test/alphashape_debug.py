@@ -47,12 +47,23 @@ def alphashape2():
     """
     三角化 -> 留外切圓半徑夠小的 -> Union -> 留 exterior -> simplify
     """
+    from shapely.plotting import plot_polygon
+    import matplotlib.pyplot as plt
+    
     pcd = o3d.io.read_point_cloud(PLY_FILE)
     points_2d = [(x, z) for x, y, z in np.asarray(pcd.points)]
 
-    polygons = [P.simplify(0.01) for P in alaphashape_union2D(points_2d)]
+    polygons = [P.simplify(0.01).buffer(0) for P in alaphashape_union2D(points_2d) if P.is_valid]
 
-    o3d.visualization.draw_geometries([shapely_poly_to_open3d_mesh(shapely.MultiPolygon(polygons))], mesh_show_wireframe=True, mesh_show_back_face=True)
+    for i, P in enumerate(polygons):
+        plot_polygon(P)
+        print(P.is_closed, P.is_empty, P.is_ring, P.is_simple, P.is_valid)
+        plt.title(f"{i + 1} / {len(polygons)}")
+        plt.show()
+
+    mesh = shapely_poly_to_open3d_mesh(shapely.MultiPolygon(polygons))
+    o3d.visualization.draw_geometries([mesh], mesh_show_wireframe=True, mesh_show_back_face=True)
+    o3d.io.write_triangle_mesh(os.path.join(os.path.dirname(__file__), "alphashape_debug/alphashape.obj"), mesh)
     
 def alphashape3():
     """

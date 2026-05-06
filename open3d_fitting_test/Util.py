@@ -135,30 +135,57 @@ def alaphashape_union2D(points_2d: list[tuple[float, float]], *, alpha: float = 
     print("== alphashape union 2D ==")
 
     s = time.perf_counter()
-    # 1. 做三角化
+    # 1. 做三角化 ###############################################################################################
     tris = Delaunay(points_2d)
     print("\tDelaunay: ", time.perf_counter() - s, "s")
 
     s = time.perf_counter()
-    # 2. 保留外切圓半徑小於 1/alpha 的三角形
+    # 2. 保留外切圓半徑小於 1/alpha 的三角形 ######################################################################
     # tris.simplicies is (N, 3) (dtype=int) -> N 個 simplex，每個 simplex 由 3 個 2D 點儲存，每列為點的 index
     # tris.points is (M, 2) (dtype=float64) -> M 個 2D 點，每列為點的 xy 座標
     simplices_coord = tris.points[tris.simplices] # (N, 3, 2)
 
     radius = circumradius(simplices_coord) # (N, 1)
 
-    faces = tris.simplices[radius < 1 / alpha]
+    faces = tris.simplices[radius < 1 / alpha] # (K, 3), K -> 外接圓半徑小於 1 / alpha 的三角面
 
     print("\tCircumradius: ", time.perf_counter() - s, "s")
 
     s = time.perf_counter()
-    # 3. 將所有留下的面做 Union
-    Union = shapely.unary_union([
-        shapely.Polygon([points_2d[vid] for vid in F]) for F in faces
-    ])
+    # 3. 將所有留下的面做 Union ##################################################################################
+    # 取出所有留下的面的 Edge
+    edges, adjFaceCount = np.unique(
+        np.sort(
+            np.vstack((
+                np.column_stack((faces[:, 0], faces[:, 1])),
+                np.column_stack((faces[:, 1], faces[:, 2])),
+                np.column_stack((faces[:, 2], faces[:, 0]))
+            ))
+            , axis=1
+        )
+        , return_counts=True, axis=0
+    )
+
+    assert np.min(adjFaceCount) == 1
+    assert np.max(adjFaceCount) == 2
+
+    # 只有相鄰一個面的 edge 為 boundary
+    boundaries = edges[adjFaceCount == 1]
+    boundaries_linestring = [shapely.LineString(tris.points[B]) for B in boundaries]
+
+    # 對 boundary 做 polygonize
+    Union = [P for P in shapely.get_parts(shapely.polygonize(boundaries_linestring)) if isinstance(P, shapely.Polygon)]
+    for P in Union: shapely.prepare(P)
+
+    remain_pts = np.unique(edges.flat)
+    # 對 polygonize 的結果過濾，只將有包含 remain_pts 的 polygon 留下 -> 沒包含的代表是 interior hole 形成的 Polygon
+    # TODO: 可能可以分析留下的面有幾個 connected component，每個 component 只留一個點，加速判斷
+    tree = STRtree(shapely.MultiPoint(tris.points[remain_pts]).geoms)
+    result, _ = tree.query(Union, 'contains')
+
     print("\tUnion: ", time.perf_counter() - s, "s")
 
-    return [P for P in shapely.get_parts(Union) if isinstance(P, shapely.Polygon)]
+    return [Union[i] for i in np.unique(result)]
 
 ############################################################################################################################
 # Point Cloud

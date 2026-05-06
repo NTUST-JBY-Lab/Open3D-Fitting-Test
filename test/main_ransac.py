@@ -76,8 +76,8 @@ def main():
         # Step2. Alpha Shape #################################
         s = time.perf_counter()
         try:
-            alphashape = max(alaphashape_union2D(points_2d, alpha=50), key=lambda p: p.area)
-            mesh = shapely_poly_to_open3d_mesh(alphashape.simplify(0.01))
+            alphashape = max(alaphashape_union2D(points_2d, alpha=50), key=lambda p: p.area).simplify(0.01).buffer(0)
+            mesh = shapely_poly_to_open3d_mesh(alphashape)
             o3d.io.write_triangle_mesh(os.path.join(INPUT_DIR, f"{obj_name}_alphashape.obj"), mesh)
         except Exception as e:
             print(e)
