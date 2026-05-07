@@ -122,10 +122,20 @@ def circumradius(points: np.ndarray, res: np.ndarray):
         circumcenter = np.linalg.solve(A, b)[:-1]
         res[0] = np.linalg.norm(points[0, :] - np.dot(circumcenter, points))
 
-def alaphashape_union2D(points_2d: list[tuple[float, float]], *, alpha: float = 50) -> list[shapely.Polygon]:
+def alaphashape_union2D(points_2d: list[tuple[float, float]], *, alpha: float = 50, grid_size: float = 1e-6) -> list[shapely.Polygon]:
     """
     Delaunay 三角化 -> 留外切圓半徑夠小的 -> Union
+
+    :param alpha: alpha == 0 等同於 Convex Hull。alpha > 0，做完 Delaunay 後只留下外切圓半徑小於 1 / alpha 的三角面。
+    :param grid_size: 如果大於 0，則將 points_2d 中每個點 snap 到格子點上。grid_size 可防止點雲過度密集而產生太多細碎三角形的問題
     """
+    if alpha < 0:
+        raise ValueError("alpha should be >= 0")
+
+    if grid_size > 0:
+        # 對 points_2d 做 snapping
+        points_2d = np.round(np.array(points_2d) / grid_size) * grid_size
+
     if alpha == 0:
         return [shapely.MultiPoint(points_2d).convex_hull]
     
@@ -151,6 +161,9 @@ def alaphashape_union2D(points_2d: list[tuple[float, float]], *, alpha: float = 
 
     print("\tCircumradius: ", time.perf_counter() - s, "s")
 
+    if faces.size == 0:
+        raise RuntimeError("Finding alphashape failed - probably because alpha is too big")
+
     s = time.perf_counter()
     # 3. 將所有留下的面做 Union ##################################################################################
     # 取出所有留下的面的 Edge
@@ -170,11 +183,12 @@ def alaphashape_union2D(points_2d: list[tuple[float, float]], *, alpha: float = 
     assert np.max(adjFaceCount) == 2
 
     # 只有相鄰一個面的 edge 為 boundary
-    boundaries = edges[adjFaceCount == 1]
-    boundaries_linestring = [shapely.LineString(tris.points[B]) for B in boundaries]
+    boundaries = [shapely.LineString(tris.points[B]) for B in edges[adjFaceCount == 1]]
 
     # 對 boundary 做 polygonize
-    Union = [P for P in shapely.get_parts(shapely.polygonize(boundaries_linestring)) if isinstance(P, shapely.Polygon)]
+    # polygonize 前用 unary_union 來讓 linestring 是 noded 的
+    Union = shapely.polygonize(shapely.unary_union(boundaries).geoms)
+    Union = [P for P in shapely.get_parts(Union) if isinstance(P, shapely.Polygon)]
     for P in Union: shapely.prepare(P)
 
     remain_pts = np.unique(edges.flat)

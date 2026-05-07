@@ -81,6 +81,7 @@ def main():
             o3d.io.write_triangle_mesh(os.path.join(INPUT_DIR, f"{obj_name}_alphashape.obj"), mesh)
         except Exception as e:
             print(e)
+            print("")
             continue
 
         print("Alpha Shape:", time.perf_counter() - s)

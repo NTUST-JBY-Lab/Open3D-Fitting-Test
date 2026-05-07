@@ -57,7 +57,7 @@ def alphashape2():
 
     for i, P in enumerate(polygons):
         plot_polygon(P)
-        print(P.is_closed, P.is_empty, P.is_ring, P.is_simple, P.is_valid)
+        print("is_simple:", P.is_simple, "is_valid:", P.is_valid)
         plt.title(f"{i + 1} / {len(polygons)}")
         plt.show()
 
