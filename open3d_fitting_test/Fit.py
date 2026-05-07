@@ -148,15 +148,26 @@ def createCylinder(points: np.ndarray, center: np.ndarray, axis: np.ndarray, rad
     pts -= center
     pts[:] = pts @ rot.T
 
-    # 找圓柱的高、寬
-    height, width = pcd.get_axis_aligned_bounding_box().get_extent()[[2, 0]] # Z 方向的長為圓柱的高，X 方向的長為圓柱的寬
+    # 找圓柱的範圍
+    # Z 方向的長為圓柱的高，X 方向的長為圓柱的寬
+    min_bound = pcd.get_axis_aligned_bounding_box().get_min_bound()
+    max_bound = pcd.get_axis_aligned_bounding_box().get_max_bound()
+    height = max_bound[2] - min_bound[2]
+    
+    # Y 方向 average > 0 -> 只取上半；否則，只取下半圓柱
+    if (max_bound[1] + min_bound[1]) / 2 > 0:
+        min_bound[1] = 0
+        max_bound[1] = np.inf
+    else:
+        min_bound[1] = -np.inf
+        max_bound[1] = 0
 
     # Step 2. 建立圓柱 ####################################################################################################
     # 預設：中心 (0, 0, 0)、軸向 (0, 0, 1)
-    cylinder = o3d.geometry.TriangleMesh.create_cylinder(radius, height)
+    cylinder = o3d.geometry.TriangleMesh.create_cylinder(radius, height + 1) # height 多取一些，等下再切掉
 
     # 對 cylinder 裁切
-    cylinder = clean_crop_aabb(cylinder, (-width / 2, 0, -np.inf), (width / 2, np.inf, np.inf))
+    cylinder = clean_crop_aabb(cylinder, min_bound, max_bound)
     
     # 旋轉使 (0, 0, 1) 變 axis + 平移使 (0, 0, 0) 變 center
     # rot = np.linalg.inv(rotAlignUpFwd(np.array([0, 1, 0]), axis))
