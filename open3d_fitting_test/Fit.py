@@ -37,7 +37,7 @@ def fitCreateSphereRANSAC(points: np.ndarray) -> o3d.geometry.TriangleMesh:
     pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points))
     aabb = pcd.get_axis_aligned_bounding_box()
 
-    center, radius, _ = pyrsc.Sphere().fit(points)
+    center, radius, _ = pyrsc.Sphere().fit(points, thresh=0.01)
     adjustCenterInPlace(pcd, center)
 
     # 建立以 center 為球心，半徑 radius 的球
@@ -46,13 +46,21 @@ def fitCreateSphereRANSAC(points: np.ndarray) -> o3d.geometry.TriangleMesh:
     vert[:] = vert[:] + center
 
     # 切除
-    max_bound = aabb.get_max_bound()
-    max_bound[1] = np.inf # 高度不切最高
-    mesh = clean_crop_aabb(mesh, aabb.get_min_bound(), max_bound)
+    min_bound, max_bound = aabb.get_min_bound(), aabb.get_max_bound()
+    avgY = (max_bound[1] + min_bound[1]) / 2
+    # 若平均高度 > 圓心的Y -> 留上半
+    if avgY > center[1]:
+        min_bound[1] = center[1]
+        max_bound[1] = np.inf
+    # 留下半
+    else:
+        min_bound[1] = -np.inf
+        max_bound[1] = center[1]
+    mesh = clean_crop_aabb(mesh, min_bound, max_bound)
 
     return mesh
 
-def fitCylinderRANSAC(pts: np.ndarray, thresh=0.2, maxIteration=10000):
+def fitCylinderRANSAC(pts: np.ndarray, thresh=0.2, maxIteration=1000):
     """
     使用 RANSAC Fitting 圓柱 
     

@@ -42,11 +42,12 @@ def main():
         # Step1.建立點雲 ####################################
         s = time.perf_counter()
         points, normals = sample_mesh_with_raycast(mesh, 0.01)
-        print("\tSample Raycast:", time.perf_counter() - s); sR = time.perf_counter()
+        print("\tSample Raycast:", time.perf_counter() - s, "s"); sR = time.perf_counter()
         points = np.vstack([points
                             , sample_along_edges(mesh, 0.01)])
-        print("\tSample Edges:", time.perf_counter() - sR)
+        print("\tSample Edges:", time.perf_counter() - sR, "s")
         pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points))
+        del points
         points_2d = np.array([(p[0], p[2]) for p in pcd.points])
 
         # 如果太小 -> 忽略
@@ -66,7 +67,7 @@ def main():
         except QhullError:
             skip = True
         
-        print("Sample:", time.perf_counter() - s)
+        print("Sample:", time.perf_counter() - s, "s")
         o3d.io.write_point_cloud(os.path.join(INPUT_DIR, f"{obj_name}_pcd.ply"), pcd)
 
         if skip:
@@ -84,20 +85,22 @@ def main():
             print("")
             continue
 
-        print("Alpha Shape:", time.perf_counter() - s)
+        print("Alpha Shape:", time.perf_counter() - s, "s")
 
         # Step3. RANSAC ####################################
         s = time.perf_counter()
         pcd.estimate_normals()
         # 一次 fit 三個
-        eq_P, inliers_P = pcd.segment_plane(0.01, 3, 1000)
-        center_S, radius_S, inliers_S = pyrsc.Sphere().fit(np.asarray(pcd.points))
-        center_C, axis_C, radius_C, inliers_C = fitCylinderRANSAC(np.asarray(points), maxIteration=50)
-        # Log
-        log.write(f"{obj_name}\nPlane: {eq_P} ({len(inliers_P)})\nSphere: {center_S}, {radius_S} ({inliers_S.size})\nCylinder: center-{center_C}, axis-{axis_C}, radius-{radius_C} ({inliers_C.size})\n")
+        sR = time.perf_counter(); eq_P, inliers_P = pcd.segment_plane(0.01, 3, 1000);                                                              print(f"\tRANSAC Plane: {time.perf_counter() - sR} s")
+        sR = time.perf_counter(); center_S, radius_S, inliers_S = pyrsc.Sphere().fit(np.asarray(pcd.points), thresh=0.01);                         print(f"\tRANSAC Sphere: {time.perf_counter() - sR} s")
+        sR = time.perf_counter(); center_C, axis_C, radius_C, inliers_C = fitCylinderRANSAC(np.asarray(pcd.points), maxIteration=50, thresh=0.01); print(f"\tRANSAC Cylinder: {time.perf_counter() - sR} s")
 
         aabb = pcd.get_axis_aligned_bounding_box()
         original_size = np.max(aabb.get_extent()[[0, 2]])
+
+        # Log
+        log.write(f"{obj_name} (#pts: {np.asarray(pcd.points).shape[0]}, max_width: {original_size})\n")
+        log.write(f"Plane: {eq_P} ({len(inliers_P)})\nSphere: {center_S}, {radius_S} ({inliers_S.shape[0]})\nCylinder: center-{center_C}, axis-{axis_C}, radius-{radius_C} ({inliers_C.shape[0]})\n")
 
         # 看哪個比較接近就用哪個 ##########################################################
         if len(inliers_P) >= inliers_S.size and len(inliers_P) >= inliers_C.size:
@@ -110,7 +113,7 @@ def main():
                 log.write("Sphere too big -> Force Plane\n")
                 fit_target = 'Plane'
             # 兩者很相近 -> 傾向用平面
-            elif math.isclose(inliers_S.size, len(inliers_P), rel_tol=0.1):
+            elif math.isclose(inliers_S.size, len(inliers_P), rel_tol=0.2):
                 log.write("Spher and Plane are almost same -> Prefer Plane\n")
                 fit_target = 'Plane'
         else:
@@ -121,7 +124,7 @@ def main():
                 log.write("Cylinder too big -> Force Plane\n")
                 fit_target = 'Plane'
             # 兩者很相近 -> 傾向用平面
-            elif math.isclose(inliers_C.size, len(inliers_P), rel_tol=0.1):
+            elif math.isclose(inliers_C.size, len(inliers_P), rel_tol=0.2):
                 log.write("Spher and Plane are almost same -> Prefer Plane\n")
                 fit_target = 'Plane'
         
@@ -143,9 +146,17 @@ def main():
                 vert[:] = vert[:] + center_S
 
                 # 切除
-                max_bound = aabb.get_max_bound()
-                max_bound[1] = np.inf # 高度不切最高
-                mesh = clean_crop_aabb(mesh, aabb.get_min_bound(), max_bound)
+                min_bound, max_bound = aabb.get_min_bound(), aabb.get_max_bound()
+                avgY = (max_bound[1] + min_bound[1]) / 2
+                # 若平均高度 > 圓心的Y -> 留上半
+                if avgY > center_S[1]:
+                    min_bound[1] = center_S[1]
+                    max_bound[1] = np.inf
+                # 留下半
+                else:
+                    min_bound[1] = -np.inf
+                    max_bound[1] = center_S[1]
+                mesh = clean_crop_aabb(mesh, min_bound, max_bound)
 
             case 'Cylinder':
                 log.write("Fit Cylinder\n")
@@ -154,9 +165,11 @@ def main():
         log.write("\n")
         log.flush()
         o3d.io.write_triangle_mesh(os.path.join(INPUT_DIR, f"{obj_name}_RANSAC.obj"), mesh)
-        print("RANSAC:", time.perf_counter() - s)
+        print("RANSAC:", time.perf_counter() - s, "s")
         print("")
 
 if __name__ == "__main__":
     cleanup_result(INPUT_DIR)
+    main_start = time.perf_counter()
     main()
+    print(f"\nTotal Time: {time.perf_counter() - main_start} s")
