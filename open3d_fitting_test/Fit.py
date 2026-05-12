@@ -72,7 +72,7 @@ def fitCylinderRANSAC(pts: np.ndarray, thresh=0.2, maxIteration=1000):
     ---
     """
     n_points = pts.shape[0]
-    best_inliers = []
+    best_inliers = np.array([])
     best_line_pt = None
     best_axis = None
     best_radius = None
@@ -134,9 +134,12 @@ def fitCylinderRANSAC(pts: np.ndarray, thresh=0.2, maxIteration=1000):
             best_axis = line_dir
             best_radius = radius
 
-    # Project Point Cloud's center onto cylinder's axis
-    pcd_center = pcd.get_center()
-    projected_center = best_line_pt + np.dot(pcd_center - best_line_pt, best_axis) * best_axis
+    if len(best_inliers) > 0:
+        # Project Point Cloud's center onto cylinder's axis
+        pcd_center = pcd.get_center()
+        projected_center = best_line_pt + np.dot(pcd_center - best_line_pt, best_axis) * best_axis
+    else:
+        projected_center = None
 
     return projected_center, best_axis, best_radius, best_inliers
 
