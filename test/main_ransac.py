@@ -135,6 +135,7 @@ def main():
                 # project alphashape
                 vert = np.asarray(mesh.vertices)
                 vert[:, 1] = -(eq_P[0] * vert[:, 0] + eq_P[2] * vert[:, 2] + eq_P[3]) / eq_P[1]
+                mesh.paint_uniform_color(np.array([0, 0, 1]))
 
             case 'Sphere':
                 log.write("Fit Sphere\n")
@@ -157,10 +158,12 @@ def main():
                     min_bound[1] = -np.inf
                     max_bound[1] = center_S[1]
                 mesh = clean_crop_aabb(mesh, min_bound, max_bound)
+                mesh.paint_uniform_color(np.array([0, 1, 0]))
 
             case 'Cylinder':
                 log.write("Fit Cylinder\n")
                 mesh = createCylinder(np.asarray(pcd.points), center_C, axis_C, radius_C)
+                mesh.paint_uniform_color(np.array([1, 0, 0]))
 
         log.write("\n")
         log.flush()
