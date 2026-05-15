@@ -7,7 +7,7 @@ import shapely
 import open3d as o3d
 import random
 
-from .Util import shapely_poly_to_open3d_mesh, adjustCenterInPlace, clean_crop_aabb, AddBoundaryWeight, rotAlignUpFwd, pointToLineDistance
+from .Util import shapely_poly_to_open3d_mesh, adjustCenterInPlace, clean_crop_aabb, AddBoundaryWeight, almostGreaterAlongAxis, rotAlignUpFwd, pointToLineDistance
 
 def fitCreatePlaneRANSAC(points: np.ndarray, silhouette: shapely.Polygon | shapely.MultiPolygon) -> o3d.geometry.TriangleMesh:
     """
@@ -47,9 +47,8 @@ def fitCreateSphereRANSAC(points: np.ndarray) -> o3d.geometry.TriangleMesh:
 
     # 切除
     min_bound, max_bound = aabb.get_min_bound(), aabb.get_max_bound()
-    avgY = (max_bound[1] + min_bound[1]) / 2
-    # 若平均高度 > 圓心的Y -> 留上半
-    if avgY > center[1]:
+    # 若幾乎都在圓心之上 -> 留上半
+    if almostGreaterAlongAxis(pcd, 'y', center[1]):
         min_bound[1] = center[1]
         max_bound[1] = np.inf
     # 留下半
@@ -165,8 +164,8 @@ def createCylinder(points: np.ndarray, center: np.ndarray, axis: np.ndarray, rad
     max_bound = pcd.get_axis_aligned_bounding_box().get_max_bound()
     height = max_bound[2] - min_bound[2]
     
-    # Y 方向 average > 0 -> 只取上半；否則，只取下半圓柱
-    if (max_bound[1] + min_bound[1]) / 2 > 0:
+    # 幾乎都大於0 -> 只取上半；否則，只取下半圓柱
+    if almostGreaterAlongAxis(pcd, 'y', 0):
         min_bound[1] = 0
         max_bound[1] = np.inf
     else:

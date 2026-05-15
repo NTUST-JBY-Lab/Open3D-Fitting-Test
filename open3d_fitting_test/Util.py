@@ -97,7 +97,7 @@ def pointToLineDistance(p0: np.ndarray, line_pt: np.ndarray, line_dir: np.ndarra
     return np.linalg.norm(np.cross(line_dir, line_pt - p0)) / np.linalg.norm(line_dir)
 
 ############################################################################################################################
-# Alpha Shape
+#region Alpha Shape
 ############################################################################################################################
 @nb.guvectorize([(nb.float64[:, :], nb.float64[:])], '(m, n) -> ()', cache=True)
 def circumradius(points: np.ndarray, res: np.ndarray):
@@ -200,9 +200,10 @@ def alaphashape_union2D(points_2d: list[tuple[float, float]], *, alpha: float = 
     print("\tUnion: ", time.perf_counter() - s, "s")
 
     return [Union[i] for i in np.unique(result)]
+#endregion
 
 ############################################################################################################################
-# Point Cloud
+#region Point Cloud
 ############################################################################################################################
 def isSymmetricAlong(pcd: o3d.geometry.PointCloud, axis: Literal['x', 'y', 'z'], thresh: float):
     """ 檢查 pcd 沿著某一個軸是否是對稱的 """
@@ -232,6 +233,13 @@ def adjustCenterInPlace(pcd: o3d.geometry.PointCloud, center: list[float]):
     if isSymmetricAlong(pcd, 'z', 0.01):
         center[2] = pcd.get_center()[2]
 
+def almostGreaterAlongAxis(pcd: o3d.geometry.PointCloud, axis: Literal['x', 'y', 'z'], thresh: float):
+    """ 檢查 pcd 中是否過半的點的 axis 軸的值 > thresh """
+    pts = np.asarray(pcd.points)
+    axis = {'x': 0, 'y': 1, 'z': 2}[axis]
+
+    return np.sum(pts[:, axis] > thresh) > pts.shape[0] / 2
+
 def AddBoundaryWeight(pcd: o3d.geometry.PointCloud, silhouette: shapely.Polygon, *, dist: float = 0.01):
     """
     將靠近 silhouette 邊界上的點加重權重
@@ -252,8 +260,10 @@ def AddBoundaryWeight(pcd: o3d.geometry.PointCloud, silhouette: shapely.Polygon,
     ])
 
     pcd.points = o3d.utility.Vector3dVector([(p.coords[0][0], p.coords[0][2], p.coords[0][1]) for p in points_3d])
+#endregion
 
 ############################################################################################################################
+#region Slice
 # Reference: https://stackoverflow.com/a/75086582/20876404
 ############################################################################################################################
 def sliceplane(mesh: o3d.geometry.TriangleMesh, axis, value, direction):
@@ -378,3 +388,4 @@ def clean_crop_aabb(mesh: o3d.geometry.TriangleMesh, min_corner, max_corner):
     # mesh_sliced = mesh_sliced.paint_uniform_color([0,0,1])
 
     return mesh_sliced
+#endregion

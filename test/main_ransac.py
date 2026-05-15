@@ -9,7 +9,7 @@ import time
 import numpy as np
 import shapely
 from open3d_fitting_test.Samples import sample_mesh_with_raycast, sample_along_edges
-from open3d_fitting_test.Util import shapely_poly_to_open3d_mesh, alaphashape_union2D, clean_crop_aabb, adjustCenterInPlace, AddBoundaryWeight
+from open3d_fitting_test.Util import shapely_poly_to_open3d_mesh, alaphashape_union2D, clean_crop_aabb, adjustCenterInPlace, AddBoundaryWeight, almostGreaterAlongAxis
 from open3d_fitting_test.Fit import createCylinder, fitCylinderRANSAC
 from Result import cleanup_result
 import math
@@ -106,9 +106,9 @@ def main():
         s = time.perf_counter()
         pcd.estimate_normals()
         # 一次 fit 三個
-        sR = time.perf_counter(); eq_P, inliers_P = pcd.segment_plane(0.1, 3, 1000);                                                              print(f"\tRANSAC Plane: {time.perf_counter() - sR} s")
-        sR = time.perf_counter(); center_S, radius_S, inliers_S = pyrsc.Sphere().fit(np.asarray(pcd.points), thresh=0.1);                         print(f"\tRANSAC Sphere: {time.perf_counter() - sR} s")
-        sR = time.perf_counter(); center_C, axis_C, radius_C, inliers_C = fitCylinderRANSAC(np.asarray(pcd.points), maxIteration=50, thresh=0.1); print(f"\tRANSAC Cylinder: {time.perf_counter() - sR} s")
+        sR = time.perf_counter(); eq_P, inliers_P = pcd.segment_plane(0.01, 3, 1000);                                                                print(f"\tRANSAC Plane: {time.perf_counter() - sR} s")
+        sR = time.perf_counter(); center_S, radius_S, inliers_S = pyrsc.Sphere().fit(np.asarray(pcd.points), thresh=0.01);                           print(f"\tRANSAC Sphere: {time.perf_counter() - sR} s")
+        sR = time.perf_counter(); center_C, axis_C, radius_C, inliers_C = fitCylinderRANSAC(np.asarray(pcd.points), maxIteration=1000, thresh=0.01); print(f"\tRANSAC Cylinder: {time.perf_counter() - sR} s")
 
         aabb = pcd.get_axis_aligned_bounding_box()
         original_size = np.max(aabb.get_extent()[[0, 2]])
@@ -163,9 +163,8 @@ def main():
 
                 # 切除
                 min_bound, max_bound = aabb.get_min_bound(), aabb.get_max_bound()
-                avgY = (max_bound[1] + min_bound[1]) / 2
-                # 若平均高度 > 圓心的Y -> 留上半
-                if avgY > center_S[1]:
+                # 若幾乎都在圓心之上 -> 留上半
+                if almostGreaterAlongAxis(pcd, 'y', center_S[1]):
                     min_bound[1] = center_S[1]
                     max_bound[1] = np.inf
                 # 留下半
