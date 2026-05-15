@@ -29,6 +29,30 @@ if args.i is not None:
 
 log = open('log.txt', 'w')
 
+def extendTooSmall(mesh: o3d.geometry.TriangleMesh, thresh = 0.01):
+    """ 如果 mesh 投影到 XZ 平面的 Minimum bounding box 的長或寬 < thresh，則代表太小 """
+    skip = False
+
+    pts_3d = np.asarray(mesh.vertices)
+    pts_2d = pts_3d[:, [0, 2]]
+
+    try:
+        envelope: shapely.Polygon = shapely.minimum_rotated_rectangle(shapely.MultiPoint(
+            pts_2d[ConvexHull(pts_2d).vertices] # 只拿 convex hull 的邊界點算 rotated bounding box
+        ))
+        
+        if not isinstance(envelope, shapely.Polygon):
+            skip = True
+        else:
+            w = math.dist(envelope.exterior.coords[0], envelope.exterior.coords[1])
+            h = math.dist(envelope.exterior.coords[1], envelope.exterior.coords[2])
+            if w < thresh or h < thresh:
+                skip = True
+    except QhullError:
+        skip = True
+
+    return skip
+
 def main():
     for file in os.listdir(INPUT_DIR):
     # for file in ["14.obj"]:
@@ -40,7 +64,13 @@ def main():
         print("== Processing: ", obj_name)
 
         # Step1.建立點雲 ####################################
+        # 如果太小 -> 忽略
         s = time.perf_counter()
+        if extendTooSmall(mesh):
+            print("Too small -> Skip\n")
+            continue
+
+        # 同時用 Raycast 和 Edge Sample
         points, normals = sample_mesh_with_raycast(mesh, 0.01)
         print("\tSample Raycast:", time.perf_counter() - s, "s"); sR = time.perf_counter()
         points = np.vstack([points
@@ -48,31 +78,10 @@ def main():
         print("\tSample Edges:", time.perf_counter() - sR, "s")
         pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points))
         del points
-        points_2d = np.array([(p[0], p[2]) for p in pcd.points])
-
-        # 如果太小 -> 忽略
-        skip = False
-        try:
-            envelope: shapely.Polygon = shapely.minimum_rotated_rectangle(shapely.MultiPoint(
-                points_2d[ConvexHull(points_2d).vertices] # 只拿 convex hull 的邊界點算 rotated bounding box
-            ))
-            
-            if not isinstance(envelope, shapely.Polygon):
-                skip = True
-            else:
-                w = math.dist(envelope.exterior.coords[0], envelope.exterior.coords[1])
-                h = math.dist(envelope.exterior.coords[1], envelope.exterior.coords[2])
-                if w < 0.01 or h < 0.01:
-                    skip = True
-        except QhullError:
-            skip = True
+        points_2d = np.asarray(pcd.points)[:, [0, 2]]
         
         print("Sample:", time.perf_counter() - s, "s")
         o3d.io.write_point_cloud(os.path.join(INPUT_DIR, f"{obj_name}_pcd.ply"), pcd)
-
-        if skip:
-            print("Too small -> Skip\n")
-            continue
 
         # Step2. Alpha Shape #################################
         s = time.perf_counter()
@@ -91,9 +100,9 @@ def main():
         s = time.perf_counter()
         pcd.estimate_normals()
         # 一次 fit 三個
-        sR = time.perf_counter(); eq_P, inliers_P = pcd.segment_plane(0.01, 3, 1000);                                                              print(f"\tRANSAC Plane: {time.perf_counter() - sR} s")
-        sR = time.perf_counter(); center_S, radius_S, inliers_S = pyrsc.Sphere().fit(np.asarray(pcd.points), thresh=0.01);                         print(f"\tRANSAC Sphere: {time.perf_counter() - sR} s")
-        sR = time.perf_counter(); center_C, axis_C, radius_C, inliers_C = fitCylinderRANSAC(np.asarray(pcd.points), maxIteration=50, thresh=0.01); print(f"\tRANSAC Cylinder: {time.perf_counter() - sR} s")
+        sR = time.perf_counter(); eq_P, inliers_P = pcd.segment_plane(0.1, 3, 1000);                                                              print(f"\tRANSAC Plane: {time.perf_counter() - sR} s")
+        sR = time.perf_counter(); center_S, radius_S, inliers_S = pyrsc.Sphere().fit(np.asarray(pcd.points), thresh=0.1);                         print(f"\tRANSAC Sphere: {time.perf_counter() - sR} s")
+        sR = time.perf_counter(); center_C, axis_C, radius_C, inliers_C = fitCylinderRANSAC(np.asarray(pcd.points), maxIteration=50, thresh=0.1); print(f"\tRANSAC Cylinder: {time.perf_counter() - sR} s")
 
         aabb = pcd.get_axis_aligned_bounding_box()
         original_size = np.max(aabb.get_extent()[[0, 2]])
