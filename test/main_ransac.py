@@ -53,6 +53,11 @@ def extendTooSmall(mesh: o3d.geometry.TriangleMesh, thresh = 0.01):
 
     return skip
 
+def determineSampleStep(mesh: o3d.geometry.TriangleMesh) -> float:
+    dx, dz = mesh.get_axis_aligned_bounding_box().get_extent()[[0, 2]]
+
+    return max(max(dx, dz) / 100, 0.01)
+
 def main():
     for file in os.listdir(INPUT_DIR):
     # for file in ["14.obj"]:
@@ -70,11 +75,12 @@ def main():
             print("Too small -> Skip\n")
             continue
 
+        sample_step = determineSampleStep(mesh)
         # 同時用 Raycast 和 Edge Sample
-        points, normals = sample_mesh_with_raycast(mesh, 0.01)
+        points, normals = sample_mesh_with_raycast(mesh, sample_step)
         print("\tSample Raycast:", time.perf_counter() - s, "s"); sR = time.perf_counter()
         points = np.vstack([points
-                            , sample_along_edges(mesh, 0.01)])
+                            , sample_along_edges(mesh, sample_step)])
         print("\tSample Edges:", time.perf_counter() - sR, "s")
         pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points))
         del points
@@ -86,7 +92,7 @@ def main():
         # Step2. Alpha Shape #################################
         s = time.perf_counter()
         try:
-            alphashape = max(alaphashape_union2D(points_2d, alpha=50), key=lambda p: p.area).simplify(0.01).buffer(0)
+            alphashape = max(alaphashape_union2D(points_2d, alpha=1 / (2 * sample_step)), key=lambda p: p.area).simplify(0.005).buffer(0)
             mesh = shapely_poly_to_open3d_mesh(alphashape)
             o3d.io.write_triangle_mesh(os.path.join(INPUT_DIR, f"{obj_name}_alphashape.obj"), mesh)
         except Exception as e:
@@ -108,8 +114,8 @@ def main():
         original_size = np.max(aabb.get_extent()[[0, 2]])
 
         # Log
-        log.write(f"{obj_name} (#pts: {np.asarray(pcd.points).shape[0]}, max_width: {original_size})\n")
-        log.write(f"Plane: {eq_P} ({len(inliers_P)})\nSphere: {center_S}, {radius_S} ({inliers_S.shape[0]})\nCylinder: center-{center_C}, axis-{axis_C}, radius-{radius_C} ({inliers_C.shape[0]})\n")
+        log.write(f"{obj_name} (#pts: {np.asarray(pcd.points).shape[0]}, max_width: {original_size}, sample_step: {sample_step})\n")
+        log.write(f"Plane: {eq_P} ({len(inliers_P)})\nSphere: {center_S}, {radius_S} ({inliers_S.shape[0]})\nCylinder: center={center_C}, axis={axis_C}, radius={radius_C} ({inliers_C.shape[0]})\n")
 
         # 看哪個比較接近就用哪個 ##########################################################
         if len(inliers_P) >= inliers_S.size and len(inliers_P) >= inliers_C.size:

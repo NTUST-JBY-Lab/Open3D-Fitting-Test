@@ -121,7 +121,7 @@ def fitCylinderRANSAC(pts: np.ndarray, thresh=0.2, maxIteration=1000):
         #################################################################################
         # Distance from a point to a line
         pt_id_inliers = []  # list of inliers ids
-        vecC_stakado = np.stack([line_dir] * n_points, 0)
+        vecC_stakado = np.repeat([line_dir], n_points, axis=0)
         dist_pt = np.cross(vecC_stakado, (line_pt - pts))
         dist_pt = np.linalg.norm(dist_pt, axis=1)
 
