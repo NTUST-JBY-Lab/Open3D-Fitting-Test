@@ -21,11 +21,16 @@ from scipy.spatial._qhull import QhullError
 INPUT_DIR = os.path.join(os.path.dirname(__file__), "ransac_test")
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-i", help="Input Directory")
+parser.add_argument("-i", help="Input directory")
+parser.add_argument("-r", help="Relative tolerance to prefer plane")
+parser.add_argument("-R", help="Construction resolution of sphere and cylinder")
 args = parser.parse_args()
 
 if args.i is not None:
     INPUT_DIR = args.i
+
+REL_TOL = float(args.r) if args.r is not None else 0.2
+RESOLUTION = int(args.R) if args.R is not None else 10
 
 log = open('log.txt', 'w')
 
@@ -128,8 +133,8 @@ def main():
                 log.write("Sphere too big -> Force Plane\n")
                 fit_target = 'Plane'
             # 兩者很相近 -> 傾向用平面
-            elif math.isclose(inliers_S.size, len(inliers_P), rel_tol=0.2):
-                log.write("Spher and Plane are almost same -> Prefer Plane\n")
+            elif math.isclose(inliers_S.size, len(inliers_P), rel_tol=REL_TOL):
+                log.write("Sphere and Plane are almost same -> Prefer Plane\n")
                 fit_target = 'Plane'
         else:
             fit_target = 'Cylinder'
@@ -139,8 +144,8 @@ def main():
                 log.write("Cylinder too big -> Force Plane\n")
                 fit_target = 'Plane'
             # 兩者很相近 -> 傾向用平面
-            elif math.isclose(inliers_C.size, len(inliers_P), rel_tol=0.2):
-                log.write("Spher and Plane are almost same -> Prefer Plane\n")
+            elif math.isclose(inliers_C.size, len(inliers_P), rel_tol=REL_TOL):
+                log.write("Cylinder and Plane are almost same -> Prefer Plane\n")
                 fit_target = 'Plane'
         
         # Create Result ############################################################
@@ -157,7 +162,7 @@ def main():
                 adjustCenterInPlace(pcd, center_S)
 
                 # 建立以 center 為球心，半徑 radius 的球
-                mesh = o3d.geometry.TriangleMesh.create_sphere(radius_S, resolution=10)
+                mesh = o3d.geometry.TriangleMesh.create_sphere(radius_S, resolution=RESOLUTION)
                 vert = np.asarray(mesh.vertices)
                 vert[:] = vert[:] + center_S
 
@@ -176,7 +181,7 @@ def main():
 
             case 'Cylinder':
                 log.write("Fit Cylinder\n")
-                mesh = createCylinder(np.asarray(pcd.points), center_C, axis_C, radius_C)
+                mesh = createCylinder(np.asarray(pcd.points), center_C, axis_C, radius_C, RESOLUTION)
                 mesh.paint_uniform_color(np.array([1, 0, 0]))
 
         log.write("\n")

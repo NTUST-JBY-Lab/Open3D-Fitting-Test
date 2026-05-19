@@ -143,7 +143,7 @@ def fitCylinderRANSAC(pts: np.ndarray, thresh=0.2, maxIteration=1000):
     return projected_center, best_axis, best_radius, best_inliers
 
 
-def createCylinder(points: np.ndarray, center: np.ndarray, axis: np.ndarray, radius: float) -> o3d.geometry.TriangleMesh:
+def createCylinder(points: np.ndarray, center: np.ndarray, axis: np.ndarray, radius: float, resolution: int) -> o3d.geometry.TriangleMesh:
     """ 建立圓柱 """
     # Step 1. 找高、寬 #####################################################################################################
     pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(points))
@@ -174,7 +174,7 @@ def createCylinder(points: np.ndarray, center: np.ndarray, axis: np.ndarray, rad
 
     # Step 2. 建立圓柱 ####################################################################################################
     # 預設：中心 (0, 0, 0)、軸向 (0, 0, 1)
-    cylinder = o3d.geometry.TriangleMesh.create_cylinder(radius, height + 1) # height 多取一些，等下再切掉
+    cylinder = o3d.geometry.TriangleMesh.create_cylinder(radius, height + 1, resolution) # height 多取一些，等下再切掉
 
     # 對 cylinder 裁切
     cylinder = clean_crop_aabb(cylinder, min_bound, max_bound)
