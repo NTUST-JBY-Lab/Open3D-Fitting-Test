@@ -22,6 +22,8 @@ INPUT_DIR = os.path.join(os.path.dirname(__file__), "ransac_test")
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-i", help="Input directory")
+parser.add_argument("-t", help="Ransac Iteration")
+parser.add_argument("-T", help="Ransac Threshold")
 parser.add_argument("-r", help="Relative tolerance to prefer plane")
 parser.add_argument("-R", help="Construction resolution of sphere and cylinder")
 args = parser.parse_args()
@@ -29,6 +31,8 @@ args = parser.parse_args()
 if args.i is not None:
     INPUT_DIR = args.i
 
+ITERATION = int(args.t) if args.t is not None else 1000
+THRESHOLD = float(args.T) if args.T is not None else 0.01
 REL_TOL = float(args.r) if args.r is not None else 0.2
 RESOLUTION = int(args.R) if args.R is not None else 10
 
@@ -111,9 +115,9 @@ def main():
         s = time.perf_counter()
         pcd.estimate_normals()
         # 一次 fit 三個
-        sR = time.perf_counter(); eq_P, inliers_P = pcd.segment_plane(0.01, 3, 1000);                                                                print(f"\tRANSAC Plane: {time.perf_counter() - sR} s")
-        sR = time.perf_counter(); center_S, radius_S, inliers_S = pyrsc.Sphere().fit(np.asarray(pcd.points), thresh=0.01);                           print(f"\tRANSAC Sphere: {time.perf_counter() - sR} s")
-        sR = time.perf_counter(); center_C, axis_C, radius_C, inliers_C = fitCylinderRANSAC(np.asarray(pcd.points), maxIteration=1000, thresh=0.01); print(f"\tRANSAC Cylinder: {time.perf_counter() - sR} s")
+        sR = time.perf_counter(); eq_P, inliers_P = pcd.segment_plane(THRESHOLD, 3, ITERATION);                                                                print(f"\tRANSAC Plane: {time.perf_counter() - sR} s")
+        sR = time.perf_counter(); center_S, radius_S, inliers_S = pyrsc.Sphere().fit(np.asarray(pcd.points), maxIteration=ITERATION, thresh=THRESHOLD);        print(f"\tRANSAC Sphere: {time.perf_counter() - sR} s")
+        sR = time.perf_counter(); center_C, axis_C, radius_C, inliers_C = fitCylinderRANSAC(np.asarray(pcd.points), maxIteration=ITERATION, thresh=THRESHOLD); print(f"\tRANSAC Cylinder: {time.perf_counter() - sR} s")
 
         aabb = pcd.get_axis_aligned_bounding_box()
         original_size = np.max(aabb.get_extent()[[0, 2]])
@@ -123,30 +127,44 @@ def main():
         log.write(f"Plane: {eq_P} ({len(inliers_P)})\nSphere: {center_S}, {radius_S} ({inliers_S.shape[0]})\nCylinder: center={center_C}, axis={axis_C}, radius={radius_C} ({inliers_C.shape[0]})\n")
 
         # 看哪個比較接近就用哪個 ##########################################################
-        if len(inliers_P) >= inliers_S.size and len(inliers_P) >= inliers_C.size:
+        choice = sorted([('Plane', len(inliers_P)), ('Sphere', inliers_S.size), ('Cylinder', inliers_C.size)]
+                        , key=lambda x: x[1], reverse=True)
+        fit_target = None
+
+        for i in range(len(choice)):
+            match choice[i][0]:
+                case 'Plane':
+                    fit_target = 'Plane'
+                    break
+
+                case 'Sphere':
+                    # Fitting 出的球太大了
+                    if radius_S > 2 * original_size:
+                        log.write("Sphere too big -> Next Choice\n")
+                        continue
+                    # 兩者很相近 -> 傾向用平面
+                    elif math.isclose(inliers_S.size, len(inliers_P), rel_tol=REL_TOL):
+                        log.write("Sphere and Plane are almost same -> Prefer Plane\n")
+                        continue
+
+                    fit_target = 'Sphere'
+                    break
+                
+                case 'Cylinder':
+                    # Fitting 出的圓柱太大了
+                    if radius_C > 2 * original_size:
+                        log.write("Cylinder too big -> Next Choice\n")
+                        continue
+                    # 兩者很相近 -> 傾向用平面
+                    elif math.isclose(inliers_C.size, len(inliers_P), rel_tol=REL_TOL):
+                        log.write("Cylinder and Plane are almost same -> Prefer Plane\n")
+                        continue
+
+                    fit_target = 'Cylinder'
+                    break
+        
+        if fit_target is None:
             fit_target = 'Plane'
-        elif inliers_S.size > len(inliers_P) and inliers_S.size > inliers_C.size:
-            fit_target = 'Sphere'
-
-            # Fitting 出的球太大了 -> 用平面 fitting
-            if radius_S > 2 * original_size:
-                log.write("Sphere too big -> Force Plane\n")
-                fit_target = 'Plane'
-            # 兩者很相近 -> 傾向用平面
-            elif math.isclose(inliers_S.size, len(inliers_P), rel_tol=REL_TOL):
-                log.write("Sphere and Plane are almost same -> Prefer Plane\n")
-                fit_target = 'Plane'
-        else:
-            fit_target = 'Cylinder'
-
-            # Fitting 出的圓柱太大了 -> 用平面 fitting
-            if radius_C > 2 * original_size:
-                log.write("Cylinder too big -> Force Plane\n")
-                fit_target = 'Plane'
-            # 兩者很相近 -> 傾向用平面
-            elif math.isclose(inliers_C.size, len(inliers_P), rel_tol=REL_TOL):
-                log.write("Cylinder and Plane are almost same -> Prefer Plane\n")
-                fit_target = 'Plane'
         
         # Create Result ############################################################
         match fit_target:
