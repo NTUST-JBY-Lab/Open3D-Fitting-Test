@@ -163,6 +163,9 @@ def createCylinder(points: np.ndarray, center: np.ndarray, axis: np.ndarray, rad
     min_bound = pcd.get_axis_aligned_bounding_box().get_min_bound()
     max_bound = pcd.get_axis_aligned_bounding_box().get_max_bound()
     height = max_bound[2] - min_bound[2]
+    # 圓柱的高不切
+    min_bound[2] = -np.inf
+    max_bound[2] = np.inf
     
     # 幾乎都大於0 -> 只取上半；否則，只取下半圓柱
     if almostGreaterAlongAxis(pcd, 'y', 0):
@@ -174,7 +177,7 @@ def createCylinder(points: np.ndarray, center: np.ndarray, axis: np.ndarray, rad
 
     # Step 2. 建立圓柱 ####################################################################################################
     # 預設：中心 (0, 0, 0)、軸向 (0, 0, 1)
-    cylinder = o3d.geometry.TriangleMesh.create_cylinder(radius, height + 1, resolution) # height 多取一些，等下再切掉
+    cylinder = o3d.geometry.TriangleMesh.create_cylinder(radius, height, resolution)
 
     # 對 cylinder 裁切
     cylinder = clean_crop_aabb(cylinder, min_bound, max_bound)
